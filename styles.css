@@ -1,0 +1,522 @@
+/* ==========================================================================
+   BITÁCORA DE PALITO DE MANGO Y PRIMAVERA · styles.css
+   Mobile-First PWA (smartphone vertical). Los @media (min-width) solo amplían.
+
+   ÍNDICE
+     0 Variables · 1 Reset/base · 2 Utilidades · 3 Botones y campos
+     4 Candado/trivia + confeti · 5 Shell/cabecera/sync · 6 Vistas
+     7 Inicio (manifiesto, progreso, ruleta slot) · 8 Baúl (planes, VIP, FAB)
+     9 Mural (masonry) · 10 Premios · 11 Bottom-nav · 12 Modales/lightbox
+    13 Toasts · 14 Keyframes · 15 Responsive · 16 Reduced-motion
+
+   MAPA z-index (abajo -> arriba)
+     0 contenido · 100 .app-header · 200 .bottom-nav · 210 .baul-fab
+     500 .modal-overlay · 900 .toast-container · 1000 .lock-screen
+   ========================================================================== */
+
+/* ============================ 0. VARIABLES ============================ */
+:root {
+  /* Paleta "Mango y Primavera" (obligatoria) */
+  --mango-primary: #FFB347;
+  --mango-light: #FFCC80;
+  --mango-deep: #F57C00;
+  --spring-coral: #FF8A80;
+  --spring-pink: #F8BBD0;
+  --leaf-green: #A5D6A7;
+  --leaf-deep: #81C784;
+  --bg-cream: #FFFDF9;
+  --surface-white: #FFFFFF;
+  --text-primary: #2D231E;
+  --text-secondary: #7A6A62;
+  --shadow-soft: 0 8px 24px rgba(255, 179, 71, 0.12);
+
+  /* Tokens derivados */
+  --shadow-strong: 0 14px 36px rgba(245, 124, 0, 0.22);
+  --border-soft: rgba(122, 106, 98, 0.14);
+  --error-color: #E5484D;
+  --success-color: #3E9B4F;
+  --gold: #FFC107;
+
+  /* Tipografía */
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Radios */
+  --radius-sm: 12px; --radius-md: 18px; --radius-lg: 26px; --radius-pill: 999px;
+
+  /* Safe areas: notch iOS / barra de gestos Android (0px si no hay recorte) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Alturas de layout (sin safe-area) */
+  --nav-height: 64px;
+  --header-height: 64px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ============================ 1. RESET Y BASE ============================ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;   /* sin flash gris al tocar */
+  overflow-x: hidden;                         /* prohíbe scroll horizontal */
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh; min-height: 100dvh;      /* dvh = alto dinámico móvil */
+  overflow-x: hidden;                         /* refuerzo anti scroll horizontal */
+  background: var(--bg-cream);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;                /* sin "rebote": ilusión de app nativa */
+}
+
+h1, h2, h3, p, figure { margin: 0; }
+img { max-width: 100%; display: block; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; touch-action: manipulation; }
+:focus-visible { outline: 3px solid var(--mango-deep); outline-offset: 2px; }
+
+/* ============================ 2. UTILIDADES ============================ */
+.is-hidden { display: none !important; }
+
+/* Oculta el <input type="file|checkbox"> pero lo deja accesible vía <label for> */
+.visually-hidden-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+
+/* ============================ 3. BOTONES Y CAMPOS ============================ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px;                           /* objetivo táctil >= 44px */
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  font-size: 15px; font-weight: 700;
+  user-select: none;
+  transition: transform 0.18s var(--ease-out), box-shadow 0.18s ease, opacity 0.2s ease;
+}
+.btn:active { transform: scale(0.96); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: linear-gradient(135deg, var(--mango-primary), var(--mango-deep)); color: #fff; box-shadow: var(--shadow-strong); }
+.btn-ghost { color: var(--mango-deep); border: 2px solid var(--mango-light); background: transparent; }
+.btn-xl { width: 100%; min-height: 56px; font-size: 17px; }
+
+/* Botón icónico circular (sincronizar). .is-spinning lo añade app.js */
+.btn-icon {
+  display: inline-grid; place-items: center; width: 40px; height: 40px;
+  border-radius: 50%; color: var(--mango-deep); background: var(--surface-white);
+  border: 1px solid var(--border-soft); box-shadow: var(--shadow-soft);
+  transition: transform 0.18s var(--ease-out);
+}
+.btn-icon:active { transform: scale(0.9); }
+.btn-icon.is-spinning svg { animation: spin 0.9s linear infinite; }
+
+/* Campos de formulario */
+.field-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field-label { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+.field-control {
+  width: 100%; min-height: 48px; padding: 10px 14px;
+  font-size: 16px;                            /* >=16px: iOS no hace zoom al enfocar */
+  background: var(--surface-white); border: 1.5px solid var(--border-soft); border-radius: var(--radius-sm);
+  appearance: none; -webkit-appearance: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+select.field-control {                        /* flecha personalizada SVG inline */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23F57C00' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px;
+}
+.field-control:focus { outline: none; border-color: var(--mango-primary); box-shadow: 0 0 0 4px rgba(255, 179, 71, 0.25); }
+.field-textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Chips de filtro: contenedor con scroll horizontal INTERNO (no de la página) */
+.filter-bar, .chip-bar { display: flex; gap: 8px; padding: 2px 0 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.filter-bar { margin: 0 -16px 8px; padding-left: 16px; padding-right: 16px; }   /* sangra a los bordes */
+.filter-bar::-webkit-scrollbar, .chip-bar::-webkit-scrollbar { display: none; }
+.category-chip, .status-chip, .weather-chip {
+  flex-shrink: 0; min-height: 38px; padding: 0 16px; white-space: nowrap;
+  font-size: 13px; font-weight: 700; color: var(--text-secondary);
+  background: var(--surface-white); border: 1.5px solid var(--border-soft); border-radius: var(--radius-pill);
+  transition: all 0.2s ease;
+}
+.category-chip.is-active, .status-chip.is-active, .weather-chip.is-active {
+  color: #fff; border-color: transparent;
+  background: linear-gradient(135deg, var(--mango-primary), var(--mango-deep));
+  box-shadow: 0 6px 16px rgba(245, 124, 0, 0.28);
+}
+
+/* ============================ 4. CANDADO / TRIVIA ============================ */
+/* Capa fixed que cubre todo. `.is-unlocked` la desvanece y libera los toques */
+.lock-screen {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
+  overflow-y: auto; overflow-x: hidden;
+  background:
+    radial-gradient(circle at 15% 12%, rgba(248, 187, 208, 0.75), transparent 45%),
+    radial-gradient(circle at 88% 90%, rgba(165, 214, 167, 0.65), transparent 45%),
+    linear-gradient(160deg, var(--mango-light) 0%, var(--mango-primary) 55%, var(--spring-coral) 100%);
+  opacity: 1; visibility: visible;
+  transition: opacity 0.7s ease, transform 0.7s var(--ease-out), visibility 0s linear 0s;
+}
+.lock-screen.is-unlocked {
+  opacity: 0; transform: scale(1.06); pointer-events: none; visibility: hidden;
+  transition: opacity 0.7s ease, transform 0.7s var(--ease-out), visibility 0s linear 0.7s;  /* visibility con delay */
+}
+
+/* Confeti: capa absoluta bajo la tarjeta, no captura toques */
+.confetti-container { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.confetti-piece {
+  position: absolute; top: -20px; left: var(--x, 50%);
+  width: var(--size, 10px); height: calc(var(--size, 10px) * 1.6);
+  background: var(--color, var(--spring-pink)); border-radius: 3px; opacity: 0;
+  animation: confetti-fall var(--dur, 3.2s) var(--delay, 0s) ease-in forwards;
+}
+.confetti-piece:nth-child(5n+1) { --color: var(--spring-pink); }
+.confetti-piece:nth-child(5n+2) { --color: var(--leaf-green); }
+.confetti-piece:nth-child(5n+3) { --color: var(--surface-white); }
+.confetti-piece:nth-child(5n+4) { --color: var(--spring-coral); }
+.confetti-piece:nth-child(5n)   { --color: var(--mango-deep); }
+
+.trivia-card {
+  position: relative; z-index: 1; width: 100%; max-width: 420px; padding: 28px 22px 24px; text-align: center;
+  background: rgba(255, 253, 249, 0.94); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg); box-shadow: 0 24px 60px rgba(120, 60, 0, 0.28);
+}
+.trivia-emblem {
+  display: grid; place-items: center; width: 72px; height: 72px; margin: -62px auto 10px;   /* sobresale arriba */
+  font-size: 38px; background: var(--surface-white); border-radius: 50%; box-shadow: var(--shadow-strong);
+  animation: float 3.4s ease-in-out infinite;
+}
+.trivia-kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mango-deep); }
+.trivia-title { margin-top: 6px; font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1.1; }
+.trivia-question { margin: 14px 0 18px; font-size: 17px; font-weight: 600; }
+.trivia-options { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.trivia-option-btn {
+  min-height: 56px; padding: 12px 16px; font-size: 16px; font-weight: 600;      /* botón táctil grande */
+  background: var(--surface-white); border: 2px solid var(--mango-light); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft); transition: transform 0.15s var(--ease-out), background 0.2s ease, border-color 0.2s ease;
+}
+.trivia-option-btn:active { transform: scale(0.97); background: var(--mango-light); }
+.trivia-option-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.trivia-option-btn.is-correct { background: var(--leaf-green); border-color: var(--leaf-deep); opacity: 1; }
+.trivia-option-btn.is-wrong { background: #FFD9D6; border-color: var(--spring-coral); opacity: 1; }
+.trivia-feedback { min-height: 22px; margin-top: 14px; font-size: 14px; font-weight: 700; opacity: 0; transition: opacity 0.25s ease; }
+.trivia-feedback.is-error { color: var(--error-color); opacity: 1; }
+.trivia-feedback.is-success { color: var(--success-color); opacity: 1; }
+.trivia-card.shake-error { animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+.trivia-card.unlock-success { animation: unlock-pop 0.7s var(--ease-out) both; }
+
+/* ============================ 5. SHELL, CABECERA, SYNC ============================ */
+.app-shell {
+  position: relative; z-index: 0; width: 100%; max-width: 960px; margin: 0 auto;
+  min-height: 100vh; min-height: 100dvh; overflow-x: hidden;
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 28px);   /* espacio para la nav fija */
+}
+.app-header {                                  /* sticky + blur + respeta el notch */
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: calc(var(--header-height) + var(--safe-top));
+  padding: calc(10px + var(--safe-top)) 16px 10px;
+  background: rgba(255, 253, 249, 0.88); backdrop-filter: saturate(160%) blur(14px); -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border-bottom: 1px solid var(--border-soft);
+}
+.app-header-text { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.app-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; line-height: 1.15; }
+.app-badge {                                   /* insignia "Simón & Salomé" */
+  display: inline-block; padding: 2px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: #fff;
+  background: linear-gradient(135deg, var(--spring-coral), var(--mango-deep)); border-radius: var(--radius-pill);
+}
+.app-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Badge de sync: punto + texto. Estados: .is-online / .is-local / .is-syncing */
+.sync-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 11px; font-weight: 700; color: var(--text-secondary); background: #F7F1EC; border: 1px solid var(--border-soft); border-radius: var(--radius-pill); }
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mango-primary); }
+.sync-badge.is-online { color: var(--success-color); background: #EDF8EE; border-color: var(--leaf-green); }
+.sync-badge.is-online .sync-dot { background: var(--leaf-deep); box-shadow: 0 0 0 3px rgba(129, 199, 132, 0.3); }
+.sync-badge.is-syncing { color: var(--mango-deep); background: #FFF3E0; border-color: var(--mango-light); }
+.sync-badge.is-syncing .sync-dot { background: var(--mango-deep); animation: pulse 1s ease-in-out infinite; }
+
+/* ============================ 6. VISTAS ============================ */
+.app-main { padding: 16px 16px 0; }
+.app-view { display: none; }
+/* Solo opacidad (SIN transform): un transform crearía un contenedor para
+   position:fixed y rompería el FAB del Baúl, que vive dentro de su vista. */
+.app-view.is-active { display: block; animation: view-in 0.35s ease both; }
+.view-title { margin-bottom: 14px; font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1.15; }
+.card-title { margin-bottom: 12px; font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+
+/* ============================ 7. INICIO ============================ */
+/* Manifiesto editorial cálido */
+.manifesto-card {
+  position: relative; margin-bottom: 16px; padding: 24px 20px; overflow: hidden;
+  background: linear-gradient(160deg, #FFF3E0 0%, #FDE8EF 100%);
+  border-radius: var(--radius-lg); border: 1px solid rgba(255, 179, 71, 0.3); box-shadow: var(--shadow-soft);
+}
+.manifesto-card::before {                      /* comilla decorativa gigante */
+  content: "\201C"; position: absolute; top: -18px; left: 10px;
+  font-family: var(--font-display); font-size: 120px; line-height: 1; color: rgba(245, 124, 0, 0.14); pointer-events: none;
+}
+.manifesto-title { position: relative; margin-bottom: 14px; font-family: var(--font-display); font-size: 22px; font-weight: 700; font-style: italic; line-height: 1.3; }
+.manifesto-text { position: relative; margin-top: 12px; font-size: 14.5px; line-height: 1.7; color: var(--text-primary); }
+.manifesto-text:first-of-type { padding-left: 12px; border-left: 3px solid var(--spring-coral); }
+
+/* Tarjeta de progreso */
+.progress-card { margin-bottom: 16px; padding: 16px 18px; background: var(--surface-white); border-radius: var(--radius-md); box-shadow: var(--shadow-soft); border: 1px solid rgba(255, 179, 71, 0.18); }
+.progress-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.progress-count { font-size: 14px; font-weight: 700; }
+.progress-percent { font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--mango-deep); }
+.progress-track { height: 12px; overflow: hidden; background: #F6EEE6; border-radius: var(--radius-pill); }
+.progress-bar-fill {                           /* app.js fija style.width */
+  width: 0%; height: 100%; border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--mango-primary), var(--spring-coral), var(--leaf-deep));
+  transition: width 0.8s var(--ease-out);
+}
+
+/* Ruleta slot-machine */
+.ruleta-card { padding: 20px 18px; background: var(--surface-white); border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); border: 1px solid rgba(255, 179, 71, 0.18); }
+.pool-line { text-align: center; margin: 10px 0; }
+.pool-count { display: inline-block; padding: 4px 14px; font-size: 12px; font-weight: 700; color: var(--success-color); background: #EDF8EE; border-radius: var(--radius-pill); }
+.ruleta-slot-box {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 170px; margin-bottom: 16px; padding: 18px 14px; text-align: center; overflow: hidden;
+  background: linear-gradient(160deg, #FFF8EC, #FDE8EF);
+  border: 2px solid var(--mango-light); border-radius: var(--radius-md);
+  box-shadow: inset 0 4px 12px rgba(245, 124, 0, 0.1);
+}
+.slot-emoji { font-size: 54px; line-height: 1.1; }
+.slot-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.slot-meta { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+/* Mientras gira: contenido borroso y vibrando, borde mango intenso */
+.ruleta-slot-box.is-rolling { border-color: var(--mango-deep); }
+.ruleta-slot-box.is-rolling .slot-emoji, .ruleta-slot-box.is-rolling .slot-title { filter: blur(1.5px); animation: slot-roll 0.12s linear infinite; }
+.winner-actions { margin-top: 12px; animation: pop-in 0.5s var(--ease-out) both; }
+
+/* ============================ 8. EL BAÚL ============================ */
+.baul-plans-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 8px; }
+
+.plan-card {
+  position: relative; display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 14px 16px; text-align: left;
+  background: var(--surface-white); border-radius: var(--radius-md); border: 1px solid rgba(255, 179, 71, 0.2); box-shadow: var(--shadow-soft);
+  cursor: pointer; transition: transform 0.2s var(--ease-out); animation: card-in 0.4s var(--ease-out) both;
+}
+.plan-card:active { transform: scale(0.98); }
+.plan-card-head { display: flex; align-items: center; gap: 12px; }
+.plan-emoji { display: grid; place-items: center; width: 48px; height: 48px; flex-shrink: 0; font-size: 26px; background: linear-gradient(135deg, var(--mango-light), var(--spring-pink)); border-radius: 14px; }
+.plan-title { flex: 1; min-width: 0; font-family: var(--font-display); font-size: 16.5px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.plan-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-badge { padding: 3px 10px; font-size: 11px; font-weight: 700; color: var(--text-secondary); background: #F7F1EC; border-radius: var(--radius-pill); }
+.plan-status-pill { align-self: flex-start; padding: 3px 10px; font-size: 11px; font-weight: 800; color: var(--mango-deep); background: #FFF0DB; border-radius: var(--radius-pill); }
+.plan-anecdote-badge { padding: 3px 10px; font-size: 11px; font-weight: 700; color: #C2185B; background: #FDE8EF; border-radius: var(--radius-pill); }
+
+/* Plan completado: verde suave + sello ✓ */
+.plan-card.is-completed { background: #F3FAF4; border-color: var(--leaf-green); }
+.plan-card.is-completed .plan-title { color: var(--text-secondary); }
+.plan-card.is-completed .plan-status-pill { color: var(--success-color); background: #DFF3E1; }
+.plan-card.is-completed::after { content: "✓"; position: absolute; top: 10px; right: 14px; font-size: 20px; font-weight: 800; color: var(--leaf-deep); }
+
+/* TRATO VIP (Finca en Guatapé): ocupa toda la fila, degradado dorado y borde brillante animado */
+.plan-card.highlight-card {
+  grid-column: 1 / -1; padding: 20px 18px; border: 2.5px solid var(--gold);
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFE0B2 50%, #FDE8EF 100%);
+  animation: vip-glow 2.4s ease-in-out infinite;
+}
+.plan-card.highlight-card .plan-emoji { width: 58px; height: 58px; font-size: 32px; background: linear-gradient(135deg, var(--gold), var(--mango-deep)); }
+.plan-card.highlight-card .plan-title { font-size: 20px; }
+.plan-vip-badge {                              /* insignia con corona */
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; padding: 4px 12px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #fff;
+  background: linear-gradient(135deg, var(--gold), var(--mango-deep)); border-radius: var(--radius-pill);
+  box-shadow: 0 4px 12px rgba(245, 124, 0, 0.35);
+}
+.plan-vip-badge::before { content: "👑"; font-size: 13px; }
+
+/* Estado vacío (compartido Baúl / Mural) */
+.empty-state { padding: 40px 20px; text-align: center; }
+.empty-emoji { margin-bottom: 8px; font-size: 56px; animation: float 3.4s ease-in-out infinite; }
+.empty-title { margin-bottom: 6px; font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+.empty-text { max-width: 280px; margin: 0 auto; font-size: 14px; color: var(--text-secondary); }
+
+/* FAB "+ añadir plan": fixed, esquina inferior derecha SOBRE la barra de navegación */
+.baul-fab {
+  position: fixed; z-index: 210; right: 18px; bottom: calc(var(--nav-height) + var(--safe-bottom) + 16px);
+  display: grid; place-items: center; width: 58px; height: 58px; color: #fff;
+  background: linear-gradient(135deg, var(--mango-primary), var(--spring-coral)); border-radius: 50%;
+  border: 4px solid var(--bg-cream); box-shadow: var(--shadow-strong); transition: transform 0.2s var(--ease-out);
+}
+.baul-fab:active { transform: scale(0.9) rotate(90deg); }
+
+/* ============================ 9. EL MURAL ============================ */
+.upload-btn { margin-bottom: 16px; }
+.pinterest-grid { column-count: 2; column-gap: 12px; }       /* masonry: 2 columnas en móvil */
+.mural-card {
+  display: block; width: 100%; margin: 0 0 12px; padding: 0; text-align: left; overflow: hidden;
+  background: var(--surface-white); border-radius: var(--radius-md); border: 1px solid rgba(255, 179, 71, 0.14); box-shadow: var(--shadow-soft);
+  break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;   /* no partir tarjeta entre columnas */
+  cursor: pointer; transition: transform 0.2s var(--ease-out); animation: card-in 0.45s var(--ease-out) both;
+}
+.mural-card:active { transform: scale(0.98); }
+.mural-card img { width: 100%; height: auto; background: linear-gradient(135deg, var(--spring-pink), var(--mango-light)); }
+.mural-card-body { padding: 10px 12px 12px; }
+.mural-caption { font-family: var(--font-display); font-size: 14.5px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.mural-date { margin-top: 4px; font-size: 11.5px; color: var(--text-secondary); }
+
+/* ============================ 10. PREMIOS ============================ */
+.premios-intro { margin-bottom: 18px; padding: 14px 16px; font-size: 14px; line-height: 1.6; background: #FFF3E0; border-left: 4px solid var(--mango-primary); border-radius: var(--radius-sm); }
+.premios-category { margin-bottom: 22px; }
+.premios-category-title { margin-bottom: 10px; font-family: var(--font-display); font-size: 21px; font-weight: 700; }
+.premios-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.premio-idea-card {                            /* estética "ticket" con borde punteado */
+  position: relative; display: flex; flex-direction: column; gap: 6px; padding: 16px 18px;
+  background: var(--surface-white); border: 1.5px dashed var(--mango-primary); border-radius: var(--radius-md); box-shadow: var(--shadow-soft);
+}
+.premio-idea-card:nth-child(even) { border-color: var(--spring-coral); }
+.premio-idea-badge { align-self: flex-start; padding: 3px 10px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; background: var(--spring-coral); border-radius: var(--radius-pill); }
+
+/* ============================ 11. BARRA DE NAVEGACIÓN INFERIOR ============================ */
+/* Fija abajo (z 200). El padding inferior = safe-area (barra de gestos iOS). 4 columnas iguales. */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+  display: grid; grid-template-columns: repeat(4, 1fr); align-items: center;
+  max-width: 960px; margin: 0 auto; height: calc(var(--nav-height) + var(--safe-bottom)); padding: 0 8px var(--safe-bottom);
+  background: rgba(255, 255, 255, 0.92); backdrop-filter: saturate(160%) blur(16px); -webkit-backdrop-filter: saturate(160%) blur(16px);
+  border-top: 1px solid var(--border-soft); border-radius: 22px 22px 0 0; box-shadow: 0 -8px 28px rgba(255, 179, 71, 0.16);
+}
+.nav-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  height: var(--nav-height); color: var(--text-secondary); transition: color 0.2s ease, transform 0.2s var(--ease-out);
+}
+.nav-icon { font-size: 22px; line-height: 1; filter: grayscale(0.85); opacity: 0.7; transition: transform 0.25s var(--ease-out), filter 0.2s ease, opacity 0.2s ease; }
+.nav-label { font-size: 11px; font-weight: 700; }
+.nav-tab:active { transform: scale(0.92); }
+.nav-tab.is-active { color: var(--mango-deep); }
+.nav-tab.is-active .nav-icon { filter: none; opacity: 1; transform: translateY(-2px) scale(1.15); }
+
+/* ============================ 12. MODALES / LIGHTBOX ============================ */
+.modal-overlay {                               /* oculto por defecto; `.is-open` lo muestra */
+  position: fixed; inset: 0; z-index: 500; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(45, 35, 30, 0.5); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+.modal-overlay.is-open { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 0.3s ease, visibility 0s linear 0s; }
+
+.modal-sheet {                                 /* hoja inferior que desliza */
+  position: relative; width: 100%; max-width: 520px; max-height: 92vh; max-height: 92dvh;
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  padding: 10px 20px calc(24px + var(--safe-bottom)); background: var(--bg-cream);
+  border-radius: 28px 28px 0 0; box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.2);
+  transform: translateY(100%); transition: transform 0.4s var(--ease-out);
+}
+.modal-overlay.is-open .modal-sheet { transform: translateY(0); }
+.modal-grabber { width: 44px; height: 5px; margin: 0 auto 12px; background: #E2D6CC; border-radius: var(--radius-pill); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.modal-title { font-family: var(--font-display); font-size: 24px; font-weight: 700; line-height: 1.15; }
+.modal-close { display: grid; place-items: center; width: 38px; height: 38px; font-size: 16px; color: var(--text-secondary); background: #F3EAE2; border-radius: 50%; }
+.modal-close-floating { position: absolute; top: 12px; right: 14px; z-index: 3; background: rgba(255, 255, 255, 0.92); box-shadow: var(--shadow-soft); }
+.modal-form { display: flex; flex-direction: column; gap: 14px; }
+
+/* Cabecera del modal de plan */
+.plan-modal-head { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0 16px; text-align: center; }
+.plan-modal-head .plan-badges { justify-content: center; }
+.plan-modal-emoji { display: grid; place-items: center; width: 72px; height: 72px; font-size: 40px; background: linear-gradient(135deg, var(--mango-light), var(--spring-pink)); border-radius: 22px; }
+
+/* Interruptor "completado" (checkbox oculto + pista visual) */
+.switch-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 14px; cursor: pointer; background: var(--surface-white); border: 1.5px solid var(--border-soft); border-radius: var(--radius-sm); }
+.switch-ui { position: relative; flex-shrink: 0; width: 50px; height: 28px; background: #D9CFC7; border-radius: var(--radius-pill); transition: background 0.25s ease; }
+.switch-ui::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); transition: transform 0.25s var(--ease-out); }
+.switch-input:checked + .switch-ui { background: var(--leaf-deep); }
+.switch-input:checked + .switch-ui::after { transform: translateX(22px); }
+.switch-input:focus-visible + .switch-ui { outline: 3px solid var(--mango-deep); outline-offset: 2px; }
+.switch-label { font-size: 15px; font-weight: 700; }
+
+/* Zona de carga de foto + vista previa con metadatos de compresión */
+.photo-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 100px; cursor: pointer; color: var(--mango-deep); font-weight: 700; background: #FFF6E8; border: 2px dashed var(--mango-primary); border-radius: var(--radius-md); }
+.photo-drop:active { background: #FFE9C8; }
+.photo-drop-icon { font-size: 30px; }
+.photo-drop-text { font-size: 14px; }
+.photo-preview-wrapper { position: relative; overflow: hidden; background: #000; border-radius: var(--radius-md); }
+.photo-preview-img { width: 100%; max-height: 260px; object-fit: cover; }
+.photo-compression-meta { position: absolute; left: 10px; bottom: 10px; padding: 3px 10px; font-size: 11px; font-weight: 700; color: #fff; background: rgba(45, 35, 30, 0.7); border-radius: var(--radius-pill); }
+.photo-compression-meta:empty { display: none; }
+
+/* Lightbox: pantalla completa oscura (z 500, mismo mecanismo .is-open) */
+.modal-overlay.lightbox { align-items: center; padding: calc(56px + var(--safe-top)) 12px calc(20px + var(--safe-bottom)); background: rgba(15, 10, 8, 0.94); }
+.lightbox-figure { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; max-width: 760px; transform: scale(0.94); transition: transform 0.35s var(--ease-out); }
+.modal-overlay.lightbox.is-open .lightbox-figure { transform: scale(1); }
+.lightbox-img { max-width: 100%; max-height: 72vh; max-height: 72dvh; object-fit: contain; border-radius: var(--radius-md); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
+.lightbox-caption { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; color: #fff; }
+.lightbox-text { font-family: var(--font-display); font-size: 18px; font-weight: 500; }
+.lightbox-date { font-size: 12.5px; color: var(--mango-light); }
+.lightbox .modal-close-floating { top: calc(12px + var(--safe-top)); }
+
+/* ============================ 13. TOASTS ============================ */
+.toast-container { position: fixed; top: calc(12px + var(--safe-top)); left: 0; right: 0; z-index: 900; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px; pointer-events: none; }
+.toast { max-width: 420px; padding: 12px 18px; font-size: 14px; font-weight: 600; background: var(--surface-white); border-left: 5px solid var(--mango-primary); border-radius: var(--radius-sm); box-shadow: 0 10px 30px rgba(45, 35, 30, 0.2); pointer-events: auto; animation: toast-in 0.4s var(--ease-out) both; }
+.toast-success { border-left-color: var(--leaf-deep); background: #F1FAF2; }
+.toast-error { border-left-color: var(--error-color); background: #FFF1F0; }
+.toast-info { border-left-color: var(--mango-primary); background: #FFF8EC; }
+.toast.is-leaving { animation: toast-out 0.3s ease forwards; }          /* app.js lo añade antes de remover */
+
+/* ============================ 14. KEYFRAMES ============================ */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.6); opacity: 0.45; } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes view-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes card-in { from { opacity: 0; transform: translateY(14px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes pop-in { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); } }
+/* Trivia: error = sacudida horizontal amortiguada; éxito = salto con halo verde */
+@keyframes shake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-8px); } 40%, 60% { transform: translateX(8px); } }
+@keyframes unlock-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.06); box-shadow: 0 0 0 0 rgba(165, 214, 167, 0.8), 0 24px 60px rgba(120, 60, 0, 0.28); }
+  100% { transform: scale(1); box-shadow: 0 0 0 28px rgba(165, 214, 167, 0), 0 24px 60px rgba(120, 60, 0, 0.28); }
+}
+/* Confeti: cae con rotación y deriva lateral */
+@keyframes confetti-fall { 0% { opacity: 1; transform: translate3d(0, 0, 0) rotate(0deg); } 100% { opacity: 0; transform: translate3d(var(--drift, 30px), 105vh, 0) rotate(var(--rot, 720deg)); } }
+/* Slot: oscilación vertical rápida mientras .is-rolling */
+@keyframes slot-roll { 0% { transform: translateY(-6px); } 50% { transform: translateY(6px); } 100% { transform: translateY(-6px); } }
+/* VIP: halo dorado que respira alrededor de la tarjeta de Guatapé */
+@keyframes vip-glow {
+  0%, 100% { border-color: var(--gold); box-shadow: 0 0 10px 0 rgba(255, 193, 7, 0.45), 0 8px 24px rgba(255, 179, 71, 0.2); }
+  50% { border-color: var(--mango-deep); box-shadow: 0 0 26px 6px rgba(255, 193, 7, 0.75), 0 8px 24px rgba(245, 124, 0, 0.3); }
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(-18px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(-14px) scale(0.96); } }
+
+/* ============================ 15. RESPONSIVE (hacia arriba) ============================ */
+@media (max-width: 359px) {                    /* móviles muy estrechos */
+  .app-title { font-size: 14px; }
+  .field-row { grid-template-columns: 1fr; }
+  .manifesto-title { font-size: 19px; }
+}
+@media (min-width: 700px) {                    /* tablet */
+  .app-main { padding: 22px 24px 0; }
+  .app-title { font-size: 19px; }
+  .filter-bar { margin-left: -24px; margin-right: -24px; padding-left: 24px; padding-right: 24px; }
+  .baul-plans-grid { grid-template-columns: repeat(2, 1fr); }
+  .premios-grid { grid-template-columns: repeat(2, 1fr); }
+  .trivia-options { grid-template-columns: 1fr 1fr; }
+  .pinterest-grid { column-count: 3; column-gap: 16px; }
+  .mural-card { margin-bottom: 16px; }
+  .modal-overlay { align-items: center; padding: 20px; }
+  .modal-sheet { border-radius: 28px; transform: translateY(40px); }
+  .modal-overlay.is-open .modal-sheet { transform: translateY(0); }
+  .modal-overlay.lightbox { padding: 60px 20px 20px; }
+  .baul-fab { right: max(18px, calc(50% - 460px)); }      /* alineado con la columna centrada de 960px */
+}
+@media (min-width: 1024px) {                   /* escritorio */
+  .baul-plans-grid { grid-template-columns: repeat(3, 1fr); }
+  .premios-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ============================ 16. REDUCED MOTION ============================ */
+/* Transiciones casi instantáneas: app.js debe tener timeouts de respaldo en vez de
+   depender de transitionend/animationend. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

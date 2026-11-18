@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  BITÁCORA DE PALITO DE MANGO Y PRIMAVERA · index.html
+  Responsabilidad: SOLO estructura semántica (DOM). Estilos -> styles.css,
+  lógica -> app.js (único <script>, con `defer`, al final del <body>).
+  Los IDs/clases son un CONTRATO con app.js: no renombrar.
+
+  Capas z-index (abajo -> arriba):
+    app-shell 0 < app-header 100 < bottom-nav 200 < baul-fab 210
+      < modal-overlay 500 < toast-container 900 < lock-screen 1000
+
+  Clases de estado que añade/quita app.js:
+    .is-active (pestaña/vista/chip) · .is-hidden (display:none)
+    .is-open (modal visible) · .is-unlocked (candado abierto)
+    .is-rolling (slot de la ruleta girando) · .is-completed (plan hecho)
+  ============================================================================
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport-fit=cover: pantalla completa bajo el notch y habilita env(safe-area-inset-*) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Bitácora de Palito de Mango y Primavera</title>
+  <meta name="description" content="Bitácora romántica de Simón & Salomé: baúl de planes, mural de recuerdos y premios.">
+  <meta name="theme-color" content="#FFB347">
+
+  <!-- Metadatos para instalar como PWA en iOS -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Mango & Primavera">
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Favicon SVG inline (data URI): cero peticiones externas, cero 404 -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='192'%20height='192'%20viewBox='0%200%20512%20512'%3E%3Crect%20width='512'%20height='512'%20rx='112'%20fill='%23FFB347'/%3E%3Cellipse%20cx='256'%20cy='300'%20rx='140'%20ry='160'%20fill='%23F57C00'/%3E%3Cellipse%20cx='210'%20cy='260'%20rx='36'%20ry='72'%20fill='%23FFCC80'%20opacity='0.65'/%3E%3Cpath%20d='M270%20150%20C300%2080%20380%2070%20414%20100%20C394%20160%20330%20180%20270%20150%20Z'%20fill='%23A5D6A7'/%3E%3Ccircle%20cx='120'%20cy='120'%20r='22'%20fill='%23F8BBD0'/%3E%3Ccircle%20cx='96'%20cy='160'%20r='12'%20fill='%23FF8A80'/%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='192'%20height='192'%20viewBox='0%200%20512%20512'%3E%3Crect%20width='512'%20height='512'%20fill='%23FFB347'/%3E%3Cellipse%20cx='256'%20cy='300'%20rx='140'%20ry='160'%20fill='%23F57C00'/%3E%3Cpath%20d='M270%20150%20C300%2080%20380%2070%20414%20100%20C394%20160%20330%20180%20270%20150%20Z'%20fill='%23A5D6A7'/%3E%3C/svg%3E">
+
+  <!-- Tipografías: Fraunces (títulos editoriales) + Plus Jakarta Sans (interfaz) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <!-- ==========================================================================
+       1. PANTALLA DE CANDADO (TRIVIA) — capa fixed z-index 1000.
+       app.js añade `.is-unlocked` al acertar y se desvanece.
+       ========================================================================== -->
+  <section id="lock-screen" class="lock-screen" aria-labelledby="lock-title">
+    <!-- app.js inyecta aquí <span class="confetti-piece"> -->
+    <div id="confetti-container" class="confetti-container" aria-hidden="true"></div>
+
+    <!-- Tarjeta: animaciones .shake-error (fallo) / .unlock-success (acierto) -->
+    <div id="trivia-card" class="trivia-card">
+      <div class="trivia-emblem" aria-hidden="true">🥭</div>
+      <p class="trivia-kicker">Bitácora de Palito de Mango y Primavera</p>
+      <h1 id="lock-title" class="trivia-title">Demuestra quién eres</h1>
+      <p id="trivia-question" class="trivia-question" aria-live="polite">Cargando pregunta…</p>
+      <!-- app.js inserta 2 o 4 botones .trivia-option-btn -->
+      <div id="trivia-options" class="trivia-options" role="group" aria-label="Opciones de respuesta"></div>
+      <!-- Estados: .is-error / .is-success -->
+      <p id="trivia-feedback" class="trivia-feedback" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+
+  <!-- ==========================================================================
+       2. SHELL PRINCIPAL
+       ========================================================================== -->
+  <div id="app-shell" class="app-shell">
+
+    <!-- ---------- Cabecera sticky ---------- -->
+    <header id="app-header" class="app-header">
+      <div class="app-header-text">
+        <h1 class="app-title">Bitácora de Palito de Mango y Primavera</h1>
+        <span class="app-badge">Simón &amp; Salomé</span>
+      </div>
+      <div class="app-header-actions">
+        <!-- Estados: .is-online / .is-local / .is-syncing -->
+        <span id="sync-status-badge" class="sync-badge is-local" role="status" aria-live="polite">
+          <span class="sync-dot" aria-hidden="true"></span>
+          <span class="sync-label">Local</span>
+        </span>
+        <button id="btn-sync-refresh" class="btn-icon" type="button" aria-label="Sincronizar ahora" title="Sincronizar ahora">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M18.5 2v4h-4"/><path d="M5.5 22v-4h4"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ---------- Contenido: 4 vistas, solo una `.is-active` ---------- -->
+    <main id="app-main" class="app-main">
+
+      <!-- ===================== VISTA 1: INICIO ===================== -->
+      <section id="view-inicio" class="app-view is-active" aria-label="Inicio">
+
+        <!-- Manifiesto editorial (texto exacto) -->
+        <article class="manifesto-card">
+          <h2 class="manifesto-title">Bitácora de Palito de Mango y Primavera. Donde el mundo exterior se apaga y nosotros empezamos a ser felices.</h2>
+          <p class="manifesto-text">Este es nuestro refugio para amarnos, cuidar nuestra salud mental y regar nuestro amor sin importar lo que pase afuera. Por eso, aquí queda estrictamente prohibido hablar de la EIA, de exámenes o de la rutina. Aquí solo importamos tú y yo.</p>
+          <p class="manifesto-text">Esta bitácora es el resumen y la construcción de una historia hermosa entre dos personas que no se conocían, pero que se necesitaban sin saberlo. Todo pasa por una razón, y vamos a aprovecharla al máximo para ser felices y construir recuerdos inolvidables. No importa el tiempo, la distancia o el dinero; lo único que importa es que estemos juntos para todo lo nuevo.</p>
+        </article>
+
+        <!-- Progreso global de planes -->
+        <div class="progress-card">
+          <div class="progress-head">
+            <span id="progress-count-text" class="progress-count">0 / 33 planes completados</span>
+            <span id="progress-percent-text" class="progress-percent">0%</span>
+          </div>
+          <!-- app.js controla style.width de #progress-bar-fill -->
+          <div class="progress-track"><div id="progress-bar-fill" class="progress-bar-fill"></div></div>
+        </div>
+
+        <!-- Ruleta del destino (slot-machine) -->
+        <div class="ruleta-card">
+          <h2 class="card-title">La Ruleta del Destino</h2>
+          <div id="ruleta-weather-filter" class="chip-bar" role="group" aria-label="Filtrar por clima">
+            <button class="weather-chip is-active" type="button" data-weather="Todos">✨ Todos</button>
+            <button class="weather-chip" type="button" data-weather="☀️">☀️ Día de Sol / Salir</button>
+            <button class="weather-chip" type="button" data-weather="🌧️">🌧️ Día de Lluvia / Casa</button>
+          </div>
+          <p class="pool-line"><span id="ruleta-pool-count" class="pool-count">0 planes disponibles</span></p>
+
+          <!-- Ventana tipo tragamonedas; `.is-rolling` mientras cicla planes -->
+          <div id="ruleta-slot-box" class="ruleta-slot-box" aria-live="polite">
+            <span id="ruleta-slot-emoji" class="slot-emoji">🎲</span>
+            <span id="ruleta-slot-title" class="slot-title">¿Qué haremos hoy?</span>
+            <span id="ruleta-slot-meta" class="slot-meta">Gira para descubrirlo</span>
+          </div>
+
+          <button id="btn-spin-ruleta" class="btn btn-primary btn-xl" type="button">¡Girar Ruleta!</button>
+
+          <!-- Visible solo cuando ya hay ganador -->
+          <div id="ruleta-winner-actions" class="winner-actions is-hidden">
+            <button id="btn-open-winner-plan" class="btn btn-ghost btn-xl" type="button">Ver detalle del plan</button>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ===================== VISTA 2: EL BAÚL ===================== -->
+      <section id="view-baul" class="app-view" aria-label="El Baúl de planes">
+        <h2 class="view-title">El Baúl de Planes</h2>
+
+        <div id="baul-category-filter" class="filter-bar" role="group" aria-label="Filtrar por categoría">
+          <button class="category-chip is-active" type="button" data-category="Todos">Todos</button>
+          <button class="category-chip" type="button" data-category="Pelis y Juegos">🎬 Pelis y Juegos</button>
+          <button class="category-chip" type="button" data-category="Gastronomía">🍕 Gastronomía</button>
+          <button class="category-chip" type="button" data-category="Rumbas">🍻 Rumbas</button>
+          <button class="category-chip" type="button" data-category="Relax">🛋️ Relax</button>
+        </div>
+
+        <div id="baul-status-filter" class="filter-bar" role="group" aria-label="Filtrar por estado">
+          <button class="status-chip is-active" type="button" data-status="Todos">Todos</button>
+          <button class="status-chip" type="button" data-status="Pendientes">⏳ Pendientes</button>
+          <button class="status-chip" type="button" data-status="Completados">✅ Completados</button>
+        </div>
+
+        <!-- app.js inserta .plan-card (+ .is-completed / .highlight-card VIP) -->
+        <div id="baul-plans-grid" class="baul-plans-grid"></div>
+
+        <div id="baul-empty" class="empty-state is-hidden">
+          <div class="empty-emoji" aria-hidden="true">🥭</div>
+          <h3 class="empty-title">No hay planes con estos filtros</h3>
+          <p class="empty-text">Prueba otra categoría o toca el botón <strong>+</strong> para añadir uno nuevo.</p>
+        </div>
+
+        <!-- FAB: position:fixed. Está DENTRO de la vista, así que solo se ve con el Baúl activo -->
+        <button id="btn-fab-add-plan" class="baul-fab" type="button" aria-label="Añadir plan nuevo">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </section>
+
+
+      <!-- ===================== VISTA 3: EL MURAL ===================== -->
+      <section id="view-mural" class="app-view" aria-label="El Mural de recuerdos">
+        <h2 class="view-title">El Mural</h2>
+        <button id="btn-upload-mural" class="btn btn-primary btn-xl upload-btn" type="button">📸 Subir recuerdo al Mural</button>
+
+        <!-- Masonry Pinterest: app.js inserta .mural-card -->
+        <div id="mural-grid" class="pinterest-grid"></div>
+
+        <div id="mural-empty" class="empty-state is-hidden">
+          <div class="empty-emoji" aria-hidden="true">🌸</div>
+          <h3 class="empty-title">El mural aún está vacío</h3>
+          <p class="empty-text">Sube la primera foto para empezar a llenarlo de recuerdos.</p>
+        </div>
+      </section>
+
+
+      <!-- ===================== VISTA 4: PREMIOS ===================== -->
+      <section id="view-premios" class="app-view" aria-label="Premios">
+        <h2 class="view-title">Premios</h2>
+        <p class="premios-intro">¿Para qué sirve esta sección? La idea es que cada vez que completemos 5 o 10 planes del Baúl, desbloqueemos recompensas especiales. Aquí están nuestras ideas iniciales para que escojamos juntos cuáles dejamos oficiales y si dejamos activa esta pestaña</p>
+        <!-- app.js inserta .premios-category > .premios-grid > .premio-idea-card -->
+        <div id="premios-board" class="premios-board"></div>
+      </section>
+
+    </main>
+
+    <!-- ---------- Barra de navegación inferior fija: 4 pestañas ---------- -->
+    <nav id="bottom-nav" class="bottom-nav" aria-label="Navegación principal">
+      <button class="nav-tab is-active" type="button" data-target="view-inicio">
+        <span class="nav-icon" aria-hidden="true">🏡</span><span class="nav-label">Inicio</span>
+      </button>
+      <button class="nav-tab" type="button" data-target="view-baul">
+        <span class="nav-icon" aria-hidden="true">🥭</span><span class="nav-label">El Baúl</span>
+      </button>
+      <button class="nav-tab" type="button" data-target="view-mural">
+        <span class="nav-icon" aria-hidden="true">🖼️</span><span class="nav-label">El Mural</span>
+      </button>
+      <button class="nav-tab" type="button" data-target="view-premios">
+        <span class="nav-icon" aria-hidden="true">🏆</span><span class="nav-label">Premios</span>
+      </button>
+    </nav>
+  </div>
+
+
+  <!-- ==========================================================================
+       3. MODALES (bottom-sheets). Visibles con `.is-open`. Se cierran con
+       [data-close-modal="id"], tocando el fondo o con Escape (app.js).
+       ========================================================================== -->
+
+  <!-- ---------- 3.1 Detalle del plan ---------- -->
+  <div id="plan-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="plan-modal-title">
+    <div class="modal-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <button class="modal-close modal-close-floating" type="button" data-close-modal="plan-modal" aria-label="Cerrar">✕</button>
+
+      <div class="plan-modal-head">
+        <span id="plan-modal-emoji" class="plan-modal-emoji" aria-hidden="true">🎯</span>
+        <h2 id="plan-modal-title" class="modal-title">Plan</h2>
+        <div id="plan-modal-badges" class="plan-badges"></div>
+      </div>
+
+      <form id="form-plan-detail" class="modal-form" autocomplete="off">
+        <!-- Interruptor "completado": input oculto + pista visual -->
+        <label class="switch-row">
+          <input type="checkbox" id="plan-modal-completed" class="switch-input">
+          <span class="switch-ui" aria-hidden="true"></span>
+          <span id="plan-modal-status-label" class="switch-label">Pendiente</span>
+        </label>
+
+        <label class="field-group">
+          <span class="field-label">Nuestra anécdota</span>
+          <textarea id="plan-modal-anecdote" class="field-control field-textarea" rows="4" maxlength="800" placeholder="¿Cómo fue este plan? Cuéntalo aquí…"></textarea>
+        </label>
+
+        <label class="photo-drop" for="plan-modal-photo-input">
+          <span class="photo-drop-icon" aria-hidden="true">📷</span>
+          <span class="photo-drop-text">Añadir foto del plan</span>
+        </label>
+        <input type="file" id="plan-modal-photo-input" class="visually-hidden-input" accept="image/*">
+        <div id="plan-modal-photo-wrapper" class="photo-preview-wrapper is-hidden">
+          <img id="plan-modal-photo-preview" class="photo-preview-img" alt="Vista previa de la foto del plan">
+          <span id="plan-modal-photo-meta" class="photo-compression-meta"></span>
+        </div>
+
+        <button id="btn-save-plan-detail" class="btn btn-primary btn-xl" type="submit">Guardar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- 3.2 Añadir plan ---------- -->
+  <div id="add-plan-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="add-plan-title">
+    <div class="modal-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="add-plan-title" class="modal-title">Nuevo plan</h2>
+        <button class="modal-close" type="button" data-close-modal="add-plan-modal" aria-label="Cerrar">✕</button>
+      </div>
+
+      <form id="form-add-plan" class="modal-form" autocomplete="off">
+        <label class="field-group">
+          <span class="field-label">Título</span>
+          <input type="text" id="new-plan-title" class="field-control" required maxlength="90" placeholder="Ej: Picnic en el parque">
+        </label>
+        <div class="field-row">
+          <label class="field-group">
+            <span class="field-label">Categoría</span>
+            <select id="new-plan-category" class="field-control">
+              <option value="Pelis y Juegos">Pelis y Juegos</option>
+              <option value="Gastronomía">Gastronomía</option>
+              <option value="Rumbas">Rumbas</option>
+              <option value="Relax">Relax</option>
+            </select>
+          </label>
+          <label class="field-group">
+            <span class="field-label">Clima</span>
+            <select id="new-plan-weather" class="field-control">
+              <option value="☀️">☀️ Sol</option>
+              <option value="🌧️">🌧️ Lluvia</option>
+            </select>
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field-group">
+            <span class="field-label">Energía</span>
+            <select id="new-plan-energy" class="field-control">
+              <option value="🔋">🔋</option>
+              <option value="🔋🔋">🔋🔋</option>
+              <option value="🔋🔋🔋">🔋🔋🔋</option>
+            </select>
+          </label>
+          <label class="field-group">
+            <span class="field-label">Emoji</span>
+            <input type="text" id="new-plan-emoji" class="field-control" maxlength="4" value="✨" placeholder="✨">
+          </label>
+        </div>
+        <button id="btn-submit-new-plan" class="btn btn-primary btn-xl" type="submit">Añadir al Baúl</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- 3.3 Subir recuerdo al mural ---------- -->
+  <div id="mural-upload-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="mural-upload-title">
+    <div class="modal-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="mural-upload-title" class="modal-title">Nuevo recuerdo</h2>
+        <button class="modal-close" type="button" data-close-modal="mural-upload-modal" aria-label="Cerrar">✕</button>
+      </div>
+
+      <form id="form-mural-upload" class="modal-form" autocomplete="off">
+        <label class="photo-drop" for="mural-photo-input">
+          <span class="photo-drop-icon" aria-hidden="true">📸</span>
+          <span class="photo-drop-text">Toca para elegir una foto</span>
+        </label>
+        <input type="file" id="mural-photo-input" class="visually-hidden-input" accept="image/*">
+        <div id="mural-preview-wrapper" class="photo-preview-wrapper is-hidden">
+          <img id="mural-preview-img" class="photo-preview-img" alt="Vista previa del recuerdo">
+          <span id="mural-photo-meta" class="photo-compression-meta"></span>
+        </div>
+
+        <label class="field-group">
+          <span class="field-label">Descripción</span>
+          <input type="text" id="mural-caption-input" class="field-control" maxlength="120" placeholder="Una frase para recordarlo">
+        </label>
+        <label class="field-group">
+          <span class="field-label">Fecha</span>
+          <input type="date" id="mural-date-input" class="field-control">
+        </label>
+        <button id="btn-submit-mural" class="btn btn-primary btn-xl" type="submit">Subir al Mural</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- 3.4 Lightbox (foto a pantalla completa, fondo oscuro) ---------- -->
+  <div id="lightbox-modal" class="modal-overlay lightbox" role="dialog" aria-modal="true" aria-label="Foto ampliada">
+    <button class="modal-close modal-close-floating" type="button" data-close-modal="lightbox-modal" aria-label="Cerrar">✕</button>
+    <figure class="lightbox-figure">
+      <img id="lightbox-img" class="lightbox-img" alt="Recuerdo ampliado">
+      <figcaption class="lightbox-caption">
+        <span id="lightbox-caption" class="lightbox-text"></span>
+        <span id="lightbox-date" class="lightbox-date"></span>
+      </figcaption>
+    </figure>
+  </div>
+
+
+  <!-- ==========================================================================
+       4. TOASTS (app.js inserta <div class="toast toast-success|error|info">)
+       ========================================================================== -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Único script: toda la lógica vive en app.js -->
+  <script src="app.js" defer></script>
+</body>
+</html>

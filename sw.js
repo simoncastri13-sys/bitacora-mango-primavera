@@ -14,7 +14,7 @@
 // 🛠️ BACKDOOR: CONFIGURACIÓN DEL SERVICE WORKER (SW_CONFIG)
 const SW_CONFIG = {
   // Nombre de la caché del App Shell (subir versión fuerza purga de cachés anteriores).
-  CACHE_NAME: 'bitacora-mango-primavera-shell-v3.2',
+  CACHE_NAME: 'bitacora-mango-primavera-shell-v3.3',
   // Recursos estáticos que forman el "App Shell".
   SHELL_ASSETS: [
     './',
@@ -190,4 +190,20 @@ self.addEventListener('message', event => {
       caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key))))
     );
   }
+});
+
+/**
+ * Al tocar una notificación nativa en iOS/Android, enfoca o abre la Bitácora.
+ */
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    })
+  );
 });

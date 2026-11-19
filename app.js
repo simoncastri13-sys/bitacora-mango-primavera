@@ -557,12 +557,73 @@ function setupIdentityAndHeader() {
   $("btn-open-settings")?.addEventListener("click", openSettingsModal);
 }
 
-/** Inicializa OneSignal Web Push v16 si APP_ID está configurado. */
-function initOneSignal() {
-  if (oneSignalInitialized || !isOneSignalConfigured()) {
-    updatePushStatusUI();
-    return;
+const SEEN_NOTIFS_STORAGE_KEY = "bitacora_seen_notifs_v3";
+
+/** Dispara una notificación nativa del sistema iOS/Android (vía Service Worker) + vibración + banner en app. */
+async function triggerNativeNotification(heading, message, tag = "") {
+  if (navigator.vibrate) {
+    try { navigator.vibrate([70, 50, 90]); } catch {}
   }
+  showToast(`${heading} · ${message}`, "success");
+
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  const notifTag = tag || `bitacora-${Date.now()}`;
+  try {
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && typeof reg.showNotification === "function") {
+        await reg.showNotification(heading, {
+          body: message,
+          tag: notifTag,
+          renotify: true,
+          vibrate: [80, 50, 100],
+          data: { url: "./" }
+        });
+        return;
+      }
+    }
+    new Notification(heading, { body: message, tag: notifTag });
+  } catch (err) {
+    console.warn("Aviso al mostrar notificación del sistema:", err);
+  }
+}
+
+/** Procesa la cola de notificaciones en la nube para el usuario actual y dispara las nuevas. */
+function processCloudNotifications(notifications) {
+  const user = getCurrentUser();
+  if (!user || !Array.isArray(notifications) || notifications.length === 0) return;
+
+  let seen = getStored(SEEN_NOTIFS_STORAGE_KEY, null);
+  const isFirstInit = !Array.isArray(seen);
+  if (isFirstInit) seen = [];
+
+  const now = Date.now();
+  const recentWindowMs = 20 * 60 * 1000; // 20 minutos para el primer arranque
+  const mine = notifications
+    .filter(n => n && n.id && (!Array.isArray(n.targets) || n.targets.includes(user)) && n.from !== user)
+    .sort((a, b) => (Number(a.createdAtMs) || 0) - (Number(b.createdAtMs) || 0));
+
+  let changed = false;
+  mine.forEach(n => {
+    if (seen.includes(n.id)) return;
+    seen.push(n.id);
+    changed = true;
+    const age = now - (Number(n.createdAtMs) || now);
+    if (!isFirstInit || age <= recentWindowMs) {
+      triggerNativeNotification(n.heading || "🥭🌸 Bitácora", n.message || "Tienes una novedad de tu pareja", n.id);
+    }
+  });
+
+  if (changed || isFirstInit) {
+    if (seen.length > 60) seen = seen.slice(-60);
+    setStored(SEEN_NOTIFS_STORAGE_KEY, seen);
+  }
+}
+
+/** Inicializa OneSignal Web Push v16 si APP_ID está configurado, o activa el motor nativo de notificaciones. */
+function initOneSignal() {
+  updatePushStatusUI();
+  if (oneSignalInitialized || !isOneSignalConfigured()) return;
   oneSignalInitialized = true;
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   window.OneSignalDeferred.push(async function(OneSignal) {
@@ -591,34 +652,67 @@ function loginOneSignalUser(user) {
 function updatePushStatusUI() {
   const txt = $("push-status-text"), btn = $("btn-enable-push");
   if (!txt || !btn) return;
-  if (!isOneSignalConfigured()) {
-    txt.textContent = "Las notificaciones push se activarán automáticamente cuando configures ONESIGNAL_APP_ID en app.js y backend.gs.";
-    btn.textContent = "🔔 Notificaciones (pendiente de App ID)";
-    return;
+  const hasNativeApi = typeof Notification !== "undefined";
+  const perm = hasNativeApi ? Notification.permission : "unsupported";
+
+  if (perm === "granted") {
+    txt.textContent = "Notificaciones activas en este dispositivo ✅ Recibirás los toques de 'Pensando en ti', planes y recuerdos de tu pareja.";
+    btn.textContent = "✅ Notificaciones activas (Toca para probar)";
+  } else if (perm === "denied") {
+    txt.textContent = "El permiso de notificaciones está bloqueado en tu teléfono. Actívalo en Ajustes del iPhone > Notificaciones > Bitácora.";
+    btn.textContent = "🔕 Permiso bloqueado en Ajustes de iOS";
+  } else if (!hasNativeApi) {
+    txt.textContent = "Las alertas en tiempo real dentro de la app están activas ✅ Para notificaciones de sistema en iPhone, abre la app desde el ícono de tu Pantalla de Inicio ('Agregar a inicio').";
+    btn.textContent = "🔔 Probar alerta de pareja";
+  } else {
+    txt.textContent = "Activa las notificaciones para recibir alertas en tu iPhone cuando tu pareja te mande un 'Pensando en ti', suba un recuerdo o complete un plan.";
+    btn.textContent = "🔔 Activar notificaciones en este teléfono";
   }
-  const granted = typeof Notification !== "undefined" && Notification.permission === "granted";
-  txt.textContent = granted
-    ? "Notificaciones activas en este dispositivo ✅"
-    : "Activa las notificaciones para enterarte cuando el otro suba algo, complete un plan o piense en ti.";
-  btn.textContent = granted ? "✅ Notificaciones activas" : "🔔 Activar notificaciones";
 }
 
-function handleEnablePush() {
-  if (!isOneSignalConfigured()) {
-    return showToast("Configura ONESIGNAL_APP_ID en app.js para activar notificaciones push.", "info");
+async function handleEnablePush() {
+  const user = getCurrentUser();
+  const meta = getUserMeta(user);
+  const partner = getUserMeta(getPartnerUser(user));
+
+  if (isOneSignalConfigured()) {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async function(OneSignal) {
+      try {
+        await OneSignal.Notifications.requestPermission();
+        if (user) await OneSignal.login(user);
+        updatePushStatusUI();
+      } catch {}
+    });
   }
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  window.OneSignalDeferred.push(async function(OneSignal) {
+
+  if (typeof Notification !== "undefined") {
     try {
-      await OneSignal.Notifications.requestPermission();
-      const user = getCurrentUser();
-      if (user) await OneSignal.login(user);
+      const perm = Notification.permission === "granted"
+        ? "granted"
+        : await Notification.requestPermission();
       updatePushStatusUI();
-      showToast("¡Notificaciones configuradas! 🔔", "success");
+      if (perm === "granted") {
+        await triggerNativeNotification(
+          "🥭🌸 ¡Notificaciones activadas!",
+          `Listo ${meta?.shortName || ""}: te avisaremos cada vez que ${partner?.shortName || "tu pareja"} te mande un toque o suba un recuerdo.`
+        );
+        syncWithBackend(false, true);
+        return;
+      } else if (perm === "denied") {
+        return showToast("Activa las notificaciones en Ajustes del iPhone > Bitácora 🔔", "error");
+      }
     } catch (err) {
-      showToast("No se pudo activar las notificaciones en este navegador.", "error");
+      console.warn("Error solicitando permiso Notification:", err);
     }
-  });
+  }
+
+  // Fallback si se abre en pestaña normal de Safari sin Home Screen PWA
+  await triggerNativeNotification(
+    "🥭🌸 ¡Alertas de la Bitácora listas!",
+    "Para ver alertas en la pantalla de bloqueo del iPhone, asegúrate de abrir la Bitácora desde tu Pantalla de Inicio."
+  );
+  syncWithBackend(false, true);
 }
 
 /* ==========================================================================
@@ -801,7 +895,7 @@ function updateSyncBadge(cls, label) {
   if (span) span.textContent = label;
 }
 
-async function syncWithBackend(manual = false) {
+async function syncWithBackend(manual = false, silentBg = false) {
   if (isSyncing) return;
   const btn = $("btn-sync-refresh");
   if (!hasCloud()) {
@@ -810,37 +904,46 @@ async function syncWithBackend(manual = false) {
     return;
   }
   isSyncing = true;
-  updateSyncBadge("is-syncing", "Sincronizando…");
-  if (btn) { btn.classList.add("is-spinning"); btn.disabled = true; }
+  if (!silentBg) {
+    updateSyncBadge("is-syncing", "Sincronizando…");
+    if (btn) { btn.classList.add("is-spinning"); btn.disabled = true; }
+  }
 
   try {
     const sep = APP_CONFIG.GAS_WEB_APP_URL.includes("?") ? "&" : "?";
     const user = getCurrentUser();
     const userQuery = user ? `&usuario=${encodeURIComponent(user)}` : "";
-    const resp = await fetch(`${APP_CONFIG.GAS_WEB_APP_URL}${sep}action=getAppData${userQuery}`, { cache: "no-store" });
+    const resp = await fetch(`${APP_CONFIG.GAS_WEB_APP_URL}${sep}action=getAppData${userQuery}&_t=${Date.now()}`, { cache: "no-store" });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if (data.status && data.status !== "ok") throw new Error(data.message || "Error remoto");
 
-    if (Array.isArray(data.plans)) savePlans(data.plans.map(p => normalizePlan(p)));
-    if (Array.isArray(data.mural)) saveMural(data.mural);
-    if (Array.isArray(data.cupones)) saveCupones(data.cupones);
-    if (Array.isArray(data.puntos)) savePuntos(data.puntos);
-    if (Array.isArray(data.sabiduria)) saveSabiduria(data.sabiduria);
-    if (Array.isArray(data.preguntas) && data.preguntas.length > 0) savePreguntas(data.preguntas.map(normalizePregunta));
-    if (Array.isArray(data.personajes)) savePersonajes(data.personajes);
+    if (Array.isArray(data.notifications)) {
+      processCloudNotifications(data.notifications);
+    }
 
-    renderAllViews();
-    renderTrampaList();
+    const anyModalOpen = Boolean(document.querySelector(".modal-overlay.is-open"));
+    if (!silentBg || !anyModalOpen) {
+      if (Array.isArray(data.plans)) savePlans(data.plans.map(p => normalizePlan(p)));
+      if (Array.isArray(data.mural)) saveMural(data.mural);
+      if (Array.isArray(data.cupones)) saveCupones(data.cupones);
+      if (Array.isArray(data.puntos)) savePuntos(data.puntos);
+      if (Array.isArray(data.sabiduria)) saveSabiduria(data.sabiduria);
+      if (Array.isArray(data.preguntas) && data.preguntas.length > 0) savePreguntas(data.preguntas.map(normalizePregunta));
+      if (Array.isArray(data.personajes)) savePersonajes(data.personajes);
+
+      renderAllViews();
+      if (!anyModalOpen) renderTrampaList();
+    }
     updateSyncBadge("is-online", "En línea");
     if (manual) showToast("Bitácora sincronizada con Google Sheets & Drive ☁️", "success");
   } catch (err) {
     console.warn("Fallo sync cloud:", err);
-    updateSyncBadge("is-local", "Sin conexión");
+    if (!silentBg) updateSyncBadge("is-local", "Sin conexión");
     if (manual) showToast("No se pudo conectar con la nube. Trabajando en modo local.", "error");
   } finally {
     isSyncing = false;
-    if (btn) { btn.classList.remove("is-spinning"); btn.disabled = false; }
+    if (!silentBg && btn) { btn.classList.remove("is-spinning"); btn.disabled = false; }
   }
 }
 
@@ -2598,6 +2701,17 @@ function initApp() {
     syncWithBackend(true);
   });
   syncWithBackend(false);
+
+  // Pulso silencioso en segundo plano (cada 18s cuando la app está abierta) + al desbloquear pantalla
+  setInterval(() => {
+    if (!document.hidden && getCurrentUser()) syncWithBackend(false, true);
+  }, 18000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && getCurrentUser()) syncWithBackend(false, true);
+  });
+  window.addEventListener("focus", () => {
+    if (getCurrentUser()) syncWithBackend(false, true);
+  });
 }
 
 if ("serviceWorker" in navigator) {

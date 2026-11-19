@@ -14,7 +14,7 @@
 // 🛠️ BACKDOOR: CONFIGURACIÓN DEL SERVICE WORKER (SW_CONFIG)
 const SW_CONFIG = {
   // Nombre de la caché del App Shell (subir versión fuerza purga de cachés anteriores).
-  CACHE_NAME: 'bitacora-mango-primavera-shell-v3',
+  CACHE_NAME: 'bitacora-mango-primavera-shell-v3.1',
   // Recursos estáticos que forman el "App Shell".
   SHELL_ASSETS: [
     './',

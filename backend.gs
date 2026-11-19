@@ -37,11 +37,11 @@
 // 🛠️ BACKDOOR: CONFIGURACIÓN DE GOOGLE DRIVE Y GOOGLE SHEETS (IDs DE PRODUCCIÓN)
 /**
  * Identificadores de infraestructura en Google Drive y Google Sheets.
- * Si se reemplazan por un texto que empiece con "TU_" o quedan vacíos, el sistema
- * opera en modo Plug & Play creando o reutilizando carpeta y hoja automáticamente.
+ * Si se dejan vacíos ("") o con "TU_...", el sistema opera en modo Plug & Play 100% automático:
+ * busca una hoja/carpeta existente llamada "BD_Bitacora_Palito_Mango_Primavera" o la crea él solo.
  */
-const ROOT_FOLDER_ID = "1g0MsL5YYwIDY8cmoK7D5xhWipnRQBFUT";
-const SPREADSHEET_ID = "1FrwhX1n5OwVH3t8OwR3T7CBN96WsLrvhWUHox5El2VU";
+const ROOT_FOLDER_ID = "";
+const SPREADSHEET_ID = "";
 
 // 🛠️ BACKDOOR: CREDENCIALES DE NOTIFICACIONES PUSH (ONESIGNAL_CONFIG)
 /**
@@ -1392,7 +1392,7 @@ function saveMediaToSubfolder_(subfolderName, rawBase64, mimeType, fileName) {
     try { file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); } catch (ignore) {}
   }
   const url = isVideo
-    ? "https://drive.google.com/uc?export=download&id=" + fileId
+    ? "https://drive.google.com/file/d/" + fileId + "/preview"
     : "https://drive.google.com/thumbnail?id=" + fileId + "&sz=w1200";
   return { fileId: fileId, url: url, mediaType: isVideo ? "video" : "image", mimeType: effectiveMime };
 }
@@ -1437,7 +1437,14 @@ function trashDriveFileById_(fileId) {
 /** Resuelve la carpeta raíz usando `ROOT_FOLDER_ID` o creando "Bitacora_Mango_Primavera_Media". */
 function getOrCreateRootFolder_() {
   const configured = String(ROOT_FOLDER_ID || "").trim();
-  if (configured && configured.indexOf("TU_") !== 0) return DriveApp.getFolderById(configured);
+  if (configured && configured.indexOf("TU_") !== 0) {
+    try {
+      const folder = DriveApp.getFolderById(configured);
+      if (folder && !folder.isTrashed()) return folder;
+    } catch (e) {
+      Logger.log("Aviso: ROOT_FOLDER_ID configurado no encontrado, activando fallback: " + e);
+    }
+  }
   const props = PropertiesService.getScriptProperties();
   const cachedId = props.getProperty(FALLBACK_NAMES_.PROP_FOLDER_ID);
   if (cachedId) {
@@ -1463,7 +1470,13 @@ function getOrCreateSubfolder_(rootFolder, subfolderName) {
 /** Resuelve el Spreadsheet usando `SPREADSHEET_ID`, caché, hoja activa o creando uno nuevo. */
 function resolveSpreadsheet_() {
   const configured = String(SPREADSHEET_ID || "").trim();
-  if (configured && configured.indexOf("TU_") !== 0) return SpreadsheetApp.openById(configured);
+  if (configured && configured.indexOf("TU_") !== 0) {
+    try {
+      return SpreadsheetApp.openById(configured);
+    } catch (e) {
+      Logger.log("Aviso: SPREADSHEET_ID configurado no encontrado, activando fallback: " + e);
+    }
+  }
   const props = PropertiesService.getScriptProperties();
   const cachedId = props.getProperty(FALLBACK_NAMES_.PROP_SHEET_ID);
   if (cachedId) { try { return SpreadsheetApp.openById(cachedId); } catch (ignore) {} }

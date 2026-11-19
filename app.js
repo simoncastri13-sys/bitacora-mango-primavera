@@ -885,26 +885,44 @@ function compressImageFile(file) {
   });
 }
 
-/** Captura el primer fotograma de un video como miniatura JPEG (Canvas). */
+/** Extrae el ID de archivo de Google Drive desde cualquier variante de URL. */
+function extractDriveId(url) {
+  const s = String(url || "").trim();
+  if (!s) return "";
+  let m = s.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+  if (m) return m[1];
+  m = s.match(/\/d\/([a-zA-Z0-9_-]{15,})/);
+  if (m) return m[1];
+  return "";
+}
+
+/** Captura el primer fotograma de un video como miniatura JPEG (Canvas, compatible iOS Safari). */
 function captureVideoPoster(file) {
   return new Promise(resolve => {
     const url = URL.createObjectURL(file);
     const video = document.createElement("video");
     let settled = false;
+
     const done = result => {
       if (settled) return;
       settled = true;
-      URL.revokeObjectURL(url);
+      try { URL.revokeObjectURL(url); } catch {}
       resolve(result);
     };
-    video.preload = "metadata";
+
     video.muted = true;
+    video.defaultMuted = true;
     video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    video.preload = "auto";
     video.crossOrigin = "anonymous";
 
     const capture = () => {
       try {
-        const w = video.videoWidth || 640, h = video.videoHeight || 360;
+        const w = video.videoWidth || 640;
+        const h = video.videoHeight || 360;
+        if (w === 0 || h === 0) return;
         const scale = Math.min(720 / w, 1);
         const c = document.createElement("canvas");
         c.width = Math.max(1, Math.round(w * scale));
@@ -913,22 +931,28 @@ function captureVideoPoster(file) {
         ctx.drawImage(video, 0, 0, c.width, c.height);
         const dataUrl = c.toDataURL("image/jpeg", 0.78);
         done({ posterDataUrl: dataUrl, posterBase64: dataUrl.split(",")[1] || "" });
-      } catch {
+      } catch (err) {
+        console.warn("Aviso: Canvas poster fallback:", err);
         done({ posterDataUrl: "", posterBase64: "" });
       }
     };
 
-    video.addEventListener("loadeddata", () => {
-      if (video.duration && video.duration > 0.25) {
-        try { video.currentTime = 0.2; } catch { capture(); }
-      } else {
-        capture();
-      }
+    video.addEventListener("loadedmetadata", () => {
+      try { video.currentTime = Math.min(0.15, (video.duration || 1) / 2); } catch { capture(); }
     }, { once: true });
-    video.addEventListener("seeked", capture, { once: true });
+
+    video.addEventListener("seeked", () => { capture(); }, { once: true });
+    video.addEventListener("loadeddata", () => { setTimeout(capture, 120); }, { once: true });
+    video.addEventListener("canplay", () => { setTimeout(capture, 120); }, { once: true });
     video.addEventListener("error", () => done({ posterDataUrl: "", posterBase64: "" }), { once: true });
-    setTimeout(() => done({ posterDataUrl: "", posterBase64: "" }), 4500);
+
+    setTimeout(() => {
+      if (!settled) capture();
+      setTimeout(() => done({ posterDataUrl: "", posterBase64: "" }), 500);
+    }, 3200);
+
     video.src = url;
+    try { video.load(); } catch {}
   });
 }
 
@@ -938,6 +962,7 @@ async function processVideoFile(file) {
   if (sizeMb > APP_CONFIG.MAX_VIDEO_MB) {
     throw new Error(`El video pesa ${sizeMb.toFixed(1)} MB (máx. ${APP_CONFIG.MAX_VIDEO_MB} MB). Optimízalo primero con el Atajo de iOS 🎬`);
   }
+  const blobUrl = URL.createObjectURL(file);
   const poster = await captureVideoPoster(file);
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -949,6 +974,7 @@ async function processVideoFile(file) {
   return {
     mediaType: "video",
     dataUrl,
+    blobUrl,
     base64,
     mimeType: file.type || "video/mp4",
     fileName: file.name || `video_${Date.now()}.mp4`,
@@ -1606,10 +1632,11 @@ function setupMural() {
       id,
       caption,
       createdAt: cleanDate,
-      photoUrl: media.dataUrl,
+      photoUrl: media.mediaType === "video" ? (media.blobUrl || "") : media.dataUrl,
       mediaType: media.mediaType,
       posterUrl: media.posterDataUrl || "",
-      creadoPor: user
+      creadoPor: user,
+      blobUrl: media.blobUrl || ""
     };
     saveMural([newItem, ...getMural()]);
     renderMural();
@@ -1651,15 +1678,26 @@ function setupMural() {
     if (!item) return;
     currentLightboxItemId = item.id;
 
-    const img = $("lightbox-img"), vid = $("lightbox-video");
+    const img = $("lightbox-img"), vid = $("lightbox-video"), iframe = $("lightbox-iframe");
     if (item.mediaType === "video") {
       if (img) { img.removeAttribute("src"); img.classList.add("is-hidden"); }
-      if (vid) {
-        vid.poster = item.posterUrl || VIDEO_POSTER_FALLBACK;
-        vid.src = item.photoUrl;
-        vid.classList.remove("is-hidden");
+      const driveId = extractDriveId(item.photoUrl);
+      if (driveId) {
+        if (vid) { vid.pause(); vid.removeAttribute("src"); vid.classList.add("is-hidden"); }
+        if (iframe) {
+          iframe.src = `https://drive.google.com/file/d/${driveId}/preview`;
+          iframe.classList.remove("is-hidden");
+        }
+      } else {
+        if (iframe) { iframe.src = "about:blank"; iframe.classList.add("is-hidden"); }
+        if (vid) {
+          vid.poster = item.posterUrl || VIDEO_POSTER_FALLBACK;
+          vid.src = item.blobUrl || item.photoUrl;
+          vid.classList.remove("is-hidden");
+        }
       }
     } else {
+      if (iframe) { iframe.src = "about:blank"; iframe.classList.add("is-hidden"); }
       if (vid) { vid.pause(); vid.removeAttribute("src"); vid.classList.add("is-hidden"); }
       if (img) { img.src = item.photoUrl; img.classList.remove("is-hidden"); }
     }
@@ -2397,7 +2435,9 @@ function closeModal(modalId) {
   // Detener streaming de video al cerrar Lightbox o Plan Modal
   if (modalId === "lightbox-modal") {
     const vid = $("lightbox-video");
-    if (vid) { vid.pause(); vid.removeAttribute("src"); vid.load(); }
+    if (vid) { vid.pause(); vid.removeAttribute("src"); vid.load(); vid.classList.add("is-hidden"); }
+    const iframe = $("lightbox-iframe");
+    if (iframe) { iframe.src = "about:blank"; iframe.classList.add("is-hidden"); }
     currentLightboxItemId = null;
   } else if (modalId === "plan-modal") {
     const vid = $("plan-modal-video-preview");

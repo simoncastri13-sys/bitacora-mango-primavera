@@ -1348,9 +1348,13 @@ function uploadMediaBundle_(p, subfolderName, baseName) {
   const mime = String(p.mimeType || p.mediaMimeType || defaultMime).trim();
   const saved = saveMediaToSubfolder_(subfolderName, raw, mime, p.fileName || "");
   let posterUrl = "";
-  if (saved.mediaType === "video" && p.posterBase64 && String(p.posterBase64).trim() !== "") {
-    const poster = saveMediaToSubfolder_(subfolderName, p.posterBase64, p.posterMimeType || "image/jpeg", baseName + "_poster_" + Date.now() + ".jpg");
-    posterUrl = poster.url;
+  if (saved.mediaType === "video") {
+    if (p.posterBase64 && String(p.posterBase64).trim() !== "") {
+      const poster = saveMediaToSubfolder_(subfolderName, p.posterBase64, p.posterMimeType || "image/jpeg", baseName + "_poster_" + Date.now() + ".jpg");
+      posterUrl = poster.url;
+    } else {
+      posterUrl = "https://drive.google.com/thumbnail?id=" + saved.fileId + "&sz=w1200";
+    }
   }
   return { url: saved.url, mediaType: saved.mediaType, posterUrl: posterUrl, fileId: saved.fileId };
 }

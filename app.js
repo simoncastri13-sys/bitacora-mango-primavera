@@ -885,6 +885,9 @@ function compressImageFile(file) {
   });
 }
 
+/** Caché en sesión de Blobs de video (evita re-descargar y evita errores de MIME/Range en iOS Safari). */
+const SESSION_VIDEO_BLOBS = new Map();
+
 /** Extrae el ID de archivo de Google Drive desde cualquier variante de URL. */
 function extractDriveId(url) {
   const s = String(url || "").trim();
@@ -896,33 +899,114 @@ function extractDriveId(url) {
   return "";
 }
 
-/** Captura el primer fotograma de un video como miniatura JPEG (Canvas, compatible iOS Safari). */
+/** Obtiene el póster efectivo de un video (póster propio -> miniatura oficial de Drive -> fallback SVG). */
+function getEffectivePoster(item) {
+  if (!item) return VIDEO_POSTER_FALLBACK;
+  if (item.posterUrl && !item.posterUrl.startsWith("data:video/")) return item.posterUrl;
+  const driveId = extractDriveId(item.photoUrl);
+  if (driveId) return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1200`;
+  return VIDEO_POSTER_FALLBACK;
+}
+
+/**
+ * Carga y reproduce un video de forma 100% compatible con iOS Safari:
+ * 1. Si hay un Blob local en memoria (recién subido o ya descargado), lo reproduce de inmediato en `<video>`.
+ * 2. Si viene de Google Drive, descarga el binario por CORS desde `drive.usercontent.google.com`,
+ *    lo empaqueta como `Blob` con MIME `video/mp4` (evitando el bloqueo de `application/octet-stream` de Safari)
+ *    y lo asigna a `<video>`. Si falla CORS, cae automáticamente al visor `<iframe>` de Drive `/preview`.
+ */
+async function loadVideoIntoPlayer(vidEl, iframeEl, item) {
+  if (!item) return;
+  const poster = getEffectivePoster(item);
+  const driveId = extractDriveId(item.photoUrl);
+  const cachedBlob = (item.blobUrl && item.blobUrl.startsWith("blob:"))
+    ? item.blobUrl
+    : (SESSION_VIDEO_BLOBS.get(item.id) || (driveId ? SESSION_VIDEO_BLOBS.get(driveId) : ""));
+
+  if (iframeEl) { iframeEl.src = "about:blank"; iframeEl.classList.add("is-hidden"); }
+
+  if (cachedBlob && vidEl) {
+    vidEl.poster = poster;
+    vidEl.src = cachedBlob;
+    vidEl.classList.remove("is-hidden");
+    try { vidEl.load(); } catch {}
+    return;
+  }
+
+  if (driveId) {
+    if (vidEl) {
+      vidEl.poster = poster;
+      vidEl.removeAttribute("src");
+      vidEl.classList.remove("is-hidden");
+    }
+    try {
+      const dlUrl = `https://drive.usercontent.google.com/download?id=${driveId}&export=download&confirm=t`;
+      const resp = await fetch(dlUrl, { method: "GET", mode: "cors", credentials: "omit" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const buf = await resp.arrayBuffer();
+      if (!buf || buf.byteLength < 128) throw new Error("Buffer de video vacío");
+      const blob = new Blob([buf], { type: "video/mp4" });
+      const blobUrl = URL.createObjectURL(blob);
+      SESSION_VIDEO_BLOBS.set(driveId, blobUrl);
+      if (item.id) SESSION_VIDEO_BLOBS.set(item.id, blobUrl);
+      if (vidEl) {
+        vidEl.poster = poster;
+        vidEl.src = blobUrl;
+        vidEl.classList.remove("is-hidden");
+        try { vidEl.load(); } catch {}
+      }
+      return;
+    } catch (err) {
+      console.warn("Fallback a Drive Preview iframe:", err);
+      if (iframeEl) {
+        if (vidEl) { vidEl.pause(); vidEl.removeAttribute("src"); vidEl.classList.add("is-hidden"); }
+        iframeEl.src = `https://drive.google.com/file/d/${driveId}/preview`;
+        iframeEl.classList.remove("is-hidden");
+        return;
+      }
+    }
+  }
+
+  if (vidEl && item.photoUrl && !item.photoUrl.startsWith("data:video/")) {
+    vidEl.poster = poster;
+    vidEl.src = item.photoUrl;
+    vidEl.classList.remove("is-hidden");
+  }
+}
+
+/** Captura el primer fotograma de un video como miniatura JPEG (Canvas, compatible iOS Safari WebKit). */
 function captureVideoPoster(file) {
   return new Promise(resolve => {
     const url = URL.createObjectURL(file);
     const video = document.createElement("video");
     let settled = false;
 
+    // En iOS Safari el decodificador de hardware exige que el <video> esté en el DOM
+    video.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;";
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.setAttribute("muted", "");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    video.preload = "auto";
+    document.body.appendChild(video);
+
     const done = result => {
       if (settled) return;
       settled = true;
+      try { video.pause(); video.removeAttribute("src"); video.load(); } catch {}
+      try { video.remove(); } catch {}
       try { URL.revokeObjectURL(url); } catch {}
       resolve(result);
     };
 
-    video.muted = true;
-    video.defaultMuted = true;
-    video.playsInline = true;
-    video.setAttribute("playsinline", "");
-    video.setAttribute("webkit-playsinline", "");
-    video.preload = "auto";
-    video.crossOrigin = "anonymous";
-
     const capture = () => {
+      if (settled) return;
       try {
-        const w = video.videoWidth || 640;
-        const h = video.videoHeight || 360;
-        if (w === 0 || h === 0) return;
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (!w || !h) return;
         const scale = Math.min(720 / w, 1);
         const c = document.createElement("canvas");
         c.width = Math.max(1, Math.round(w * scale));
@@ -930,25 +1014,33 @@ function captureVideoPoster(file) {
         const ctx = c.getContext("2d");
         ctx.drawImage(video, 0, 0, c.width, c.height);
         const dataUrl = c.toDataURL("image/jpeg", 0.78);
-        done({ posterDataUrl: dataUrl, posterBase64: dataUrl.split(",")[1] || "" });
+        if (dataUrl && dataUrl.length > 200) {
+          done({ posterDataUrl: dataUrl, posterBase64: dataUrl.split(",")[1] || "" });
+        }
       } catch (err) {
         console.warn("Aviso: Canvas poster fallback:", err);
-        done({ posterDataUrl: "", posterBase64: "" });
       }
     };
 
     video.addEventListener("loadedmetadata", () => {
-      try { video.currentTime = Math.min(0.15, (video.duration || 1) / 2); } catch { capture(); }
+      try {
+        const target = Math.min(0.15, (video.duration || 1) / 2);
+        video.currentTime = target > 0 ? target : 0.05;
+      } catch {}
+      const p = video.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => { setTimeout(() => { capture(); }, 140); }).catch(() => { setTimeout(capture, 140); });
+      }
     }, { once: true });
 
-    video.addEventListener("seeked", () => { capture(); }, { once: true });
-    video.addEventListener("loadeddata", () => { setTimeout(capture, 120); }, { once: true });
-    video.addEventListener("canplay", () => { setTimeout(capture, 120); }, { once: true });
+    video.addEventListener("seeked", () => { setTimeout(capture, 60); }, { once: true });
+    video.addEventListener("timeupdate", () => { capture(); }, { once: true });
+    video.addEventListener("loadeddata", () => { setTimeout(capture, 160); }, { once: true });
     video.addEventListener("error", () => done({ posterDataUrl: "", posterBase64: "" }), { once: true });
 
     setTimeout(() => {
       if (!settled) capture();
-      setTimeout(() => done({ posterDataUrl: "", posterBase64: "" }), 500);
+      setTimeout(() => done({ posterDataUrl: "", posterBase64: "" }), 350);
     }, 3200);
 
     video.src = url;
@@ -1001,9 +1093,10 @@ function bindMediaPicker({ inputId, wrapId, imgId, videoId, metaId, onReady }) {
       if (res.mediaType === "video") {
         if (img) { img.removeAttribute("src"); img.classList.add("is-hidden"); }
         if (vid) {
-          vid.src = res.dataUrl;
+          vid.src = res.blobUrl || res.dataUrl;
           if (res.posterDataUrl) vid.poster = res.posterDataUrl;
           vid.classList.remove("is-hidden");
+          try { vid.load(); } catch {}
         }
         setText(metaId, `🎥 Video listo (${res.sizeMb} MB)`);
       } else {
@@ -1356,9 +1449,7 @@ function openPlanModal(planId) {
       wrap.classList.remove("is-hidden");
       if (p.mediaType === "video") {
         img.removeAttribute("src"); img.classList.add("is-hidden");
-        vid.src = p.photoUrl;
-        if (p.posterUrl) vid.poster = p.posterUrl;
-        vid.classList.remove("is-hidden");
+        loadVideoIntoPlayer(vid, null, p);
       } else {
         vid.pause(); vid.removeAttribute("src"); vid.classList.add("is-hidden");
         img.src = p.photoUrl;
@@ -1485,7 +1576,8 @@ function setupPlanModals() {
     }
 
     const user = getCurrentUser();
-    const finalPhotoUrl = media ? media.dataUrl : prev.photoUrl;
+    if (media?.blobUrl) SESSION_VIDEO_BLOBS.set(planId, media.blobUrl);
+    const finalPhotoUrl = media ? (media.mediaType === "video" ? (media.blobUrl || "video-local") : media.dataUrl) : prev.photoUrl;
     const finalMediaType = media ? media.mediaType : prev.mediaType;
     const finalPosterUrl = media ? (media.posterDataUrl || "") : prev.posterUrl;
     const creadoPor = prev.creadoPor || (isSecreto ? user : "");
@@ -1525,6 +1617,8 @@ function setupPlanModals() {
       offlineMsg: earnedLocally ? `¡Plan completado! +${APP_CONFIG.PLAN_COMPLETION_POINTS} pts ✅` : "Plan guardado localmente ✨",
       onSuccess: res => {
         if (res?.plan) {
+          const dId = extractDriveId(res.plan.photoUrl);
+          if (dId && media?.blobUrl) SESSION_VIDEO_BLOBS.set(dId, media.blobUrl);
           savePlans(getPlans().map(item => (item.id === planId ? normalizePlan(res.plan, item) : item)));
         }
         if (Array.isArray(res?.puntos)) savePuntos(res.puntos);
@@ -1628,6 +1722,8 @@ function setupMural() {
     const cleanDate = formatCleanDate(rawDate);
     const user = getCurrentUser();
 
+    if (media.blobUrl) SESSION_VIDEO_BLOBS.set(id, media.blobUrl);
+
     const newItem = {
       id,
       caption,
@@ -1659,9 +1755,12 @@ function setupMural() {
       offlineMsg: "¡Recuerdo guardado en El Mural! 🌸",
       onSuccess: res => {
         if (res?.item || res?.photoUrl) {
+          const cloudPhotoUrl = res.photoUrl || res.item?.photoUrl || "";
+          const dId = extractDriveId(cloudPhotoUrl);
+          if (dId && media.blobUrl) SESSION_VIDEO_BLOBS.set(dId, media.blobUrl);
           saveMural(getMural().map(m => (m.id === id ? {
             ...m,
-            photoUrl: res.photoUrl || res.item?.photoUrl || m.photoUrl,
+            photoUrl: cloudPhotoUrl || m.photoUrl,
             posterUrl: res.posterUrl || res.item?.posterUrl || m.posterUrl,
             createdAt: formatCleanDate(res.item?.createdAt || m.createdAt)
           } : m)));
@@ -1681,21 +1780,7 @@ function setupMural() {
     const img = $("lightbox-img"), vid = $("lightbox-video"), iframe = $("lightbox-iframe");
     if (item.mediaType === "video") {
       if (img) { img.removeAttribute("src"); img.classList.add("is-hidden"); }
-      const driveId = extractDriveId(item.photoUrl);
-      if (driveId) {
-        if (vid) { vid.pause(); vid.removeAttribute("src"); vid.classList.add("is-hidden"); }
-        if (iframe) {
-          iframe.src = `https://drive.google.com/file/d/${driveId}/preview`;
-          iframe.classList.remove("is-hidden");
-        }
-      } else {
-        if (iframe) { iframe.src = "about:blank"; iframe.classList.add("is-hidden"); }
-        if (vid) {
-          vid.poster = item.posterUrl || VIDEO_POSTER_FALLBACK;
-          vid.src = item.blobUrl || item.photoUrl;
-          vid.classList.remove("is-hidden");
-        }
-      }
+      loadVideoIntoPlayer(vid, iframe, item);
     } else {
       if (iframe) { iframe.src = "about:blank"; iframe.classList.add("is-hidden"); }
       if (vid) { vid.pause(); vid.removeAttribute("src"); vid.classList.add("is-hidden"); }
@@ -1741,7 +1826,7 @@ function renderMural() {
 
     const isVideo = item.mediaType === "video";
     const mediaHtml = isVideo
-      ? `<div class="mural-media video-card"><img class="video-poster" src="${escapeHtml(item.posterUrl || VIDEO_POSTER_FALLBACK)}" alt="${escapeHtml(item.caption || "Video recuerdo")}" loading="lazy"></div>`
+      ? `<div class="mural-media video-card"><img class="video-poster" src="${escapeHtml(getEffectivePoster(item))}" alt="${escapeHtml(item.caption || "Video recuerdo")}" loading="lazy"></div>`
       : `<div class="mural-media"><img src="${escapeHtml(item.photoUrl)}" alt="${escapeHtml(item.caption || "Recuerdo")}" loading="lazy"></div>`;
 
     card.innerHTML = `${mediaHtml}<div class="mural-card-body"><p class="mural-caption">${escapeHtml(item.caption || "")}</p><span class="mural-date">${escapeHtml(formatCleanDate(item.createdAt))}</span></div>`;
@@ -2506,12 +2591,28 @@ function initApp() {
   setupModalClose();
   renderAllViews();
 
-  $("btn-sync-refresh")?.addEventListener("click", () => syncWithBackend(true));
+  $("btn-sync-refresh")?.addEventListener("click", () => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => { try { r.update(); } catch {} })).catch(() => {});
+    }
+    syncWithBackend(true);
+  });
   syncWithBackend(false);
 }
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+  let swRefreshing = false;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
+  });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+      .then(reg => { try { reg.update(); } catch {} })
+      .catch(() => {});
+  });
 }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initApp);
 else initApp();

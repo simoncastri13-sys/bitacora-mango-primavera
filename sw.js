@@ -14,7 +14,7 @@
 // 🛠️ BACKDOOR: CONFIGURACIÓN DEL SERVICE WORKER (SW_CONFIG)
 const SW_CONFIG = {
   // Nombre de la caché del App Shell (subir versión fuerza purga de cachés anteriores).
-  CACHE_NAME: 'bitacora-mango-primavera-shell-v3.1',
+  CACHE_NAME: 'bitacora-mango-primavera-shell-v3.2',
   // Recursos estáticos que forman el "App Shell".
   SHELL_ASSETS: [
     './',
@@ -29,6 +29,8 @@ const SW_CONFIG = {
     /cdn\.onesignal\.com/i,
     /api\.onesignal\.com/i,
     /drive\.google\.com\/uc\?export=download/i,
+    /drive\.usercontent\.google\.com/i,
+    /drive\.google\.com\/file\//i,
     /open\.spotify\.com/i,
     /scdn\.co/i
   ],
@@ -43,12 +45,18 @@ const SW_CONFIG = {
 };
 
 /**
- * Instala el Service Worker, pre-cachea el App Shell y toma el relevo de inmediato.
+ * Instala el Service Worker, pre-cachea el App Shell (saltando caché HTTP de Safari) y toma el relevo.
  */
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(SW_CONFIG.CACHE_NAME)
-      .then(cache => cache.addAll(SW_CONFIG.SHELL_ASSETS))
+      .then(cache => Promise.all(
+        SW_CONFIG.SHELL_ASSETS.map(asset =>
+          fetch(new Request(asset, { cache: 'reload' }))
+            .then(resp => (resp && resp.status === 200 ? cache.put(asset, resp) : null))
+            .catch(() => cache.add(asset))
+        )
+      ))
       .then(() => self.skipWaiting())
   );
 });
@@ -111,11 +119,11 @@ self.addEventListener('fetch', event => {
   });
 
   if (isNetworkFirst) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(request, false));
   } else if (isShellAsset) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(networkFirst(request, true));
   } else {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(request, false));
   }
 });
 
@@ -138,17 +146,20 @@ async function cacheFirst(request) {
 
 /**
  * Estrategia Network-First con fallback a caché y a `./index.html` en navegaciones.
+ * Cuando `bypassHttpCache` es true (para el App Shell), revalida contra GitHub Pages
+ * para que las actualizaciones de código se reflejen de inmediato sin esperar 10 min.
  */
-async function networkFirst(request) {
+async function networkFirst(request, bypassHttpCache = false) {
   const cache = await caches.open(SW_CONFIG.CACHE_NAME);
   try {
-    const networkResponse = await fetch(request);
+    const fetchReq = bypassHttpCache ? new Request(request, { cache: 'no-cache' }) : request;
+    const networkResponse = await fetch(fetchReq);
     if (networkResponse && networkResponse.status === 200) {
       cache.put(request, networkResponse.clone());
     }
     return networkResponse;
   } catch (error) {
-    const cachedResponse = await cache.match(request);
+    const cachedResponse = await cache.match(request, { ignoreSearch: bypassHttpCache });
     if (cachedResponse) {
       return cachedResponse;
     }

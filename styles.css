@@ -37,6 +37,12 @@
   --success-color: #3E9B4F;
   --gold: #FFC107;
 
+  /* Azul Cielo de Salo (identidad propia de Salomé, relax/lluvia, confeti, progreso) */
+  --salo-blue: #81D4FA;
+  --salo-blue-soft: #E1F5FE;
+  --salo-blue-deep: #29B6F6;
+  --salo-blue-ink: #0277BD;
+
   /* Tipografía */
   --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -62,20 +68,20 @@ html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;   /* sin flash gris al tocar */
   overflow-x: hidden;                         /* prohíbe scroll horizontal */
+  overflow-y: auto;                           /* asegura scroll vertical nativo en desktop (rueda y touchpad) */
   scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
   min-height: 100vh; min-height: 100dvh;      /* dvh = alto dinámico móvil */
-  overflow-x: hidden;                         /* refuerzo anti scroll horizontal */
   background: var(--bg-cream);
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior-y: none;                /* sin "rebote": ilusión de app nativa */
+  overscroll-behavior-y: contain;             /* sin interferir con el scroll del mouse en desktop */
 }
 
 h1, h2, h3, p, figure { margin: 0; }
@@ -177,11 +183,12 @@ select.field-control {                        /* flecha personalizada SVG inline
   background: var(--color, var(--spring-pink)); border-radius: 3px; opacity: 0;
   animation: confetti-fall var(--dur, 3.2s) var(--delay, 0s) ease-in forwards;
 }
-.confetti-piece:nth-child(5n+1) { --color: var(--spring-pink); }
-.confetti-piece:nth-child(5n+2) { --color: var(--leaf-green); }
-.confetti-piece:nth-child(5n+3) { --color: var(--surface-white); }
-.confetti-piece:nth-child(5n+4) { --color: var(--spring-coral); }
-.confetti-piece:nth-child(5n)   { --color: var(--mango-deep); }
+.confetti-piece:nth-child(6n+1) { --color: var(--spring-pink); }
+.confetti-piece:nth-child(6n+2) { --color: var(--leaf-green); }
+.confetti-piece:nth-child(6n+3) { --color: var(--salo-blue); box-shadow: 0 0 8px 2px rgba(129, 212, 250, 0.85); }   /* destello azul cielo */
+.confetti-piece:nth-child(6n+4) { --color: var(--spring-coral); }
+.confetti-piece:nth-child(6n+5) { --color: var(--salo-blue-soft); box-shadow: 0 0 10px 3px rgba(41, 182, 246, 0.6); }  /* destello azul claro */
+.confetti-piece:nth-child(6n)   { --color: var(--mango-deep); }
 
 .trivia-card {
   position: relative; z-index: 1; width: 100%; max-width: 420px; padding: 28px 22px 24px; text-align: center;
@@ -215,14 +222,14 @@ select.field-control {                        /* flecha personalizada SVG inline
 /* ============================ 5. SHELL, CABECERA, SYNC ============================ */
 .app-shell {
   position: relative; z-index: 0; width: 100%; max-width: 960px; margin: 0 auto;
-  min-height: 100vh; min-height: 100dvh; overflow-x: hidden;
+  min-height: 100vh; min-height: 100dvh;
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 28px);   /* espacio para la nav fija */
 }
-.app-header {                                  /* sticky + blur + respeta el notch */
+.app-header {                                  /* sticky + blur + respeta el notch; 2 filas: título/acciones + identidad/sync */
   position: sticky; top: 0; z-index: 100;
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  display: flex; flex-direction: column; gap: 6px;
   min-height: calc(var(--header-height) + var(--safe-top));
-  padding: calc(10px + var(--safe-top)) 16px 10px;
+  padding: calc(10px + var(--safe-top)) 16px 8px;
   background: rgba(255, 253, 249, 0.88); backdrop-filter: saturate(160%) blur(14px); -webkit-backdrop-filter: saturate(160%) blur(14px);
   border-bottom: 1px solid var(--border-soft);
 }
@@ -274,7 +281,8 @@ select.field-control {                        /* flecha personalizada SVG inline
 .progress-track { height: 12px; overflow: hidden; background: #F6EEE6; border-radius: var(--radius-pill); }
 .progress-bar-fill {                           /* app.js fija style.width */
   width: 0%; height: 100%; border-radius: var(--radius-pill);
-  background: linear-gradient(90deg, var(--mango-primary), var(--spring-coral), var(--leaf-deep));
+  /* Barra tricolor: Mango -> Coral -> Azul Cielo */
+  background: linear-gradient(90deg, var(--mango-primary), var(--spring-coral), var(--salo-blue));
   transition: width 0.8s var(--ease-out);
 }
 
@@ -519,4 +527,386 @@ select.field-control {                        /* flecha personalizada SVG inline
    depender de transitionend/animationend. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+
+/* ==========================================================================
+   17. V3 UPGRADE — componentes nuevos (Mobile-First)
+   Índice: 17.1 Utilidades y botones · 17.2 Cabecera/identidad/háptico
+           17.3 Títulos y micro-lemas · 17.4 Inicio (infinito, marcador, accesos, Spotify)
+           17.5 Baúl (conmutador, buscadores, badges) · 17.6 Mural y video póster
+           17.7 Premios (cupones) · 17.8 Reparto · 17.9 Sabiduría y galleta
+           17.10 Modales nuevos (identidad, reto, sorpresa, ajustes, trampa)
+           17.11 Keyframes V3 · 17.12 Responsive V3
+   ========================================================================== */
+
+/* ---------- 17.1 Utilidades y botones ---------- */
+.btn-soft { color: var(--mango-deep); background: #FFF3E0; border: 1.5px solid var(--mango-light); }
+.btn-sm { min-height: 40px; padding: 0 16px; font-size: 13.5px; width: auto; flex-shrink: 0; }
+.btn-danger { color: var(--error-color); background: #FFF1F0; border: 2px solid #F9C5C2; }
+.btn-danger-ghost { min-height: 44px; padding: 0 20px; font-size: 14px; font-weight: 700; color: #FFB4AE; border: 1.5px solid rgba(255, 180, 174, 0.55); border-radius: var(--radius-pill); background: rgba(255, 255, 255, 0.06); }
+.btn-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: 0 0 8px -4px; padding: 0 14px 0 8px; font-size: 14px; font-weight: 700; color: var(--mango-deep); border-radius: var(--radius-pill); }
+.btn-back:active { background: #FFF3E0; }
+.btn-icon-emoji { font-size: 18px; line-height: 1; }
+.btn-fortune { margin-bottom: 14px; background: linear-gradient(135deg, var(--mango-primary), var(--spring-coral)); }
+
+/* ---------- 17.2 Cabecera: filas, identidad y botón háptico latente ---------- */
+.app-header-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.app-header-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; }
+.app-header-actions { gap: 6px; }
+
+.identity-pill {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 60%; padding: 4px 12px 4px 8px;
+  font-size: 11.5px; font-weight: 800; color: var(--text-secondary); background: #F7F1EC;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-pill);
+}
+.identity-pill-emoji { font-size: 14px; line-height: 1; }
+.identity-pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity-pill.is-simon { color: var(--mango-deep); background: #FFF3E0; border-color: var(--mango-light); }
+.identity-pill.is-salo { color: var(--salo-blue-ink); background: var(--salo-blue-soft); border-color: var(--salo-blue); }   /* identidad azul cielo de Salo */
+.identity-pill.is-unknown { opacity: 0.8; }
+
+/* Botón "Pensando en ti" 🥭🌸: late suave de forma permanente; .is-pulsing = latido fuerte tras enviar */
+.btn-thinking {
+  display: inline-grid; place-items: center; min-width: 48px; height: 40px; padding: 0 10px;
+  border-radius: var(--radius-pill); background: linear-gradient(135deg, #FFF3E0, var(--salo-blue-soft));
+  border: 1px solid var(--mango-light); box-shadow: 0 0 0 0 rgba(255, 138, 128, 0.45);
+  animation: heartbeat-soft 2.6s ease-in-out infinite; transition: transform 0.18s var(--ease-out);
+}
+.btn-thinking:active { transform: scale(0.88); }
+.thinking-emoji { font-size: 17px; line-height: 1; letter-spacing: -2px; }
+.btn-thinking.is-pulsing { animation: heartbeat-strong 0.9s ease-out 2; }
+
+/* ---------- 17.3 Títulos y micro-lemas fijos (cursiva) ---------- */
+.view-title { margin-bottom: 2px; }
+.view-title + .segmented-switch { margin-top: 12px; }
+.view-title + .section-title { margin-top: 6px; }
+.view-motto {
+  margin: 0 0 14px; font-family: var(--font-display); font-size: 14.5px; font-style: italic; font-weight: 500;
+  line-height: 1.4; color: var(--text-secondary);
+}
+.view-motto-tight { margin-bottom: 0; }
+.section-title { margin: 0; font-family: var(--font-display); font-size: 19px; font-weight: 700; line-height: 1.2; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 12px; }
+.section-head-cast { align-items: flex-end; }
+
+/* ---------- 17.4 Inicio ---------- */
+/* Badge estelar 2026 — ∞ : infinito grande, grueso y resplandeciente */
+.infinity-badge {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin-top: 20px; padding: 10px 18px; font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.72); border: 1.5px solid rgba(255, 179, 71, 0.45); border-radius: var(--radius-pill);
+  box-shadow: 0 6px 20px rgba(255, 179, 71, 0.2);
+}
+.infinity-year { letter-spacing: 0.06em; }
+.infinity-dash { color: var(--spring-coral); }
+.infinity-symbol {
+  display: inline-block; font-size: 1.85em; font-weight: 800; line-height: 0.8; -webkit-text-stroke: 1.2px rgba(245, 124, 0, 0.55);
+  background: linear-gradient(135deg, var(--mango-primary) 0%, var(--spring-coral) 50%, var(--salo-blue) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+  filter: drop-shadow(0 0 6px rgba(255, 179, 71, 0.75)) drop-shadow(0 0 12px rgba(129, 212, 250, 0.7));
+  animation: infinity-glow 3s ease-in-out infinite;
+}
+
+/* Marcador Simón vs Salo */
+.scoreboard-card {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-bottom: 16px; padding: 16px 12px 12px;
+  background: var(--surface-white); border-radius: var(--radius-lg); border: 1px solid rgba(255, 179, 71, 0.2); box-shadow: var(--shadow-soft);
+}
+.scoreboard-compact { margin-bottom: 8px; }
+.score-side { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 10px 6px; border-radius: var(--radius-md); }
+.score-side-simon { background: linear-gradient(160deg, #FFF3E0, #FFE0B2); }
+.score-side-salo { background: linear-gradient(160deg, var(--salo-blue-soft), #B3E5FC); }   /* Salo en azul cielo */
+.score-emoji { font-size: 24px; line-height: 1.1; }
+.score-name { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+.score-value { font-family: var(--font-display); font-size: 34px; font-weight: 700; line-height: 1.05; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.score-side-simon .score-value { color: var(--mango-deep); }
+.score-side-salo .score-value { color: var(--salo-blue-ink); }
+.score-unit { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+.score-vs { font-family: var(--font-display); font-size: 15px; font-weight: 700; font-style: italic; color: var(--spring-coral); }
+.score-daily { grid-column: 1 / -1; margin-top: 4px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.score-daily-count { display: inline-block; padding: 2px 10px; font-weight: 800; color: var(--salo-blue-ink); background: var(--salo-blue-soft); border-radius: var(--radius-pill); }
+
+/* Accesos destacados a Sabiduría y Reparto */
+.feature-link {
+  display: block; width: 100%; min-height: 62px; margin-bottom: 12px; padding: 14px 18px; text-align: left;
+  font-family: var(--font-display); font-size: 15.5px; font-weight: 700; line-height: 1.3; color: var(--text-primary);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-soft); transition: transform 0.18s var(--ease-out);
+}
+.feature-link:active { transform: scale(0.97); }
+.feature-link-sabiduria { background: linear-gradient(135deg, #FFF3E0, #FDE8EF); border: 1.5px solid rgba(255, 138, 128, 0.4); }
+.feature-link-reparto { background: linear-gradient(135deg, var(--salo-blue-soft), #FFF3E0); border: 1.5px solid rgba(129, 212, 250, 0.7); }
+
+.ruleta-card { margin-bottom: 16px; }
+.spotify-card { padding: 18px 14px 14px; background: var(--surface-white); border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); border: 1px solid rgba(255, 179, 71, 0.18); }
+.spotify-card .card-title { padding: 0 4px; }
+.spotify-embed { display: block; width: 100%; height: 352px; border: 0; border-radius: 14px; background: #F7F1EC; }
+
+/* ---------- 17.5 Baúl: conmutador estricto, buscadores independientes, badges ---------- */
+.segmented-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 12px; padding: 4px; background: #F6EEE6; border-radius: var(--radius-pill); }
+.segmented-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 10px;
+  font-size: 13.5px; font-weight: 800; color: var(--text-secondary); border-radius: var(--radius-pill); transition: all 0.2s ease;
+}
+.segmented-btn.is-active { color: var(--mango-deep); background: var(--surface-white); box-shadow: 0 4px 12px rgba(245, 124, 0, 0.18); }
+.segmented-btn[id="baul-tab-completed"].is-active { color: var(--success-color); box-shadow: 0 4px 12px rgba(62, 155, 79, 0.2); }
+.segmented-count { min-width: 22px; padding: 1px 7px; font-size: 11px; font-weight: 800; text-align: center; color: #fff; background: var(--mango-primary); border-radius: var(--radius-pill); }
+.segmented-btn[id="baul-tab-completed"] .segmented-count { background: var(--leaf-deep); }
+
+.baul-panel { display: none; }
+.baul-panel.is-active { display: block; animation: view-in 0.3s ease both; }   /* solo opacidad: no rompe el FAB fixed */
+
+.search-box { position: relative; display: flex; align-items: center; margin-bottom: 10px; }
+.search-icon { position: absolute; left: 14px; font-size: 15px; pointer-events: none; }
+.search-input {
+  width: 100%; min-height: 48px; padding: 10px 44px 10px 40px; font-size: 16px;      /* 16px: iOS no hace zoom */
+  background: var(--surface-white); border: 1.5px solid var(--border-soft); border-radius: var(--radius-pill);
+  appearance: none; -webkit-appearance: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.search-input:focus { outline: none; border-color: var(--mango-primary); box-shadow: 0 0 0 4px rgba(255, 179, 71, 0.25); }
+#search-completed-input:focus { border-color: var(--salo-blue); box-shadow: 0 0 0 4px rgba(129, 212, 250, 0.35); }
+.search-clear { position: absolute; right: 6px; display: grid; place-items: center; width: 36px; height: 36px; font-size: 13px; color: var(--text-secondary); background: #F3EAE2; border-radius: 50%; }
+
+/* Badges: Salo y relax/lluvia en azul suave; reto y sorpresa */
+.plan-badge.badge-salo, .plan-badge.badge-relax, .plan-badge.badge-rain { color: var(--salo-blue-ink); background: var(--salo-blue-soft); }
+.plan-badge.badge-simon { color: var(--mango-deep); background: #FFF0DB; }
+.plan-badge.badge-reto { color: #fff; background: linear-gradient(135deg, var(--spring-coral), var(--mango-deep)); }
+.plan-badge.badge-secreto { color: #6A1B9A; background: #F3E5F5; }
+.plan-card.is-relax, .plan-card.is-rain { background: linear-gradient(160deg, var(--surface-white), var(--salo-blue-soft)); border-color: rgba(129, 212, 250, 0.7); }
+.plan-card.is-completed.is-relax, .plan-card.is-completed.is-rain { background: #F3FAF4; border-color: var(--leaf-green); }
+.plan-card.is-secret-locked { background: linear-gradient(160deg, #F3E5F5, #FDE8EF); border: 1.5px dashed #BA68C8; }
+.plan-media-thumb { width: 100%; max-height: 180px; object-fit: cover; border-radius: var(--radius-sm); }
+
+.empty-state-compact { padding: 22px 16px; }
+.empty-state-compact .empty-emoji { font-size: 40px; }
+
+/* ---------- 17.6 Mural: tarjetas de video con póster y overlay ▶️ ---------- */
+.mural-media { position: relative; display: block; overflow: hidden; }
+.mural-media .video-poster, .video-poster { width: 100%; height: auto; min-height: 120px; object-fit: cover; background: linear-gradient(135deg, var(--salo-blue-soft), var(--spring-pink)); }
+.video-card { position: relative; }
+.video-card::after {                           /* overlay ▶️ translúcido; el video NO se descarga hasta tocar */
+  content: "▶️"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: grid; place-items: center; width: 54px; height: 54px; font-size: 22px; padding-left: 3px;
+  color: #fff; background: rgba(45, 35, 30, 0.45); border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); pointer-events: none;
+}
+.video-thumb-wrap { position: relative; }
+.video-play-overlay {                          /* alternativa explícita si app.js inserta un <span> */
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: grid; place-items: center; width: 54px; height: 54px; font-size: 22px; padding-left: 3px;
+  background: rgba(45, 35, 30, 0.45); border: 2px solid rgba(255, 255, 255, 0.85); border-radius: 50%; pointer-events: none;
+}
+.mural-card.is-poster-fallback .video-poster { aspect-ratio: 4 / 3; }
+
+/* Vista previa en modales: foto o video + botón de borrar medio */
+.photo-preview-video { width: 100%; max-height: 260px; background: #000; }
+.btn-media-delete {
+  position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 42px; height: 42px; font-size: 18px;
+  background: rgba(255, 255, 255, 0.94); border-radius: 50%; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+.btn-media-delete:active { transform: scale(0.9); }
+
+/* Lightbox: video + botón borrar */
+.lightbox-video { max-width: 100%; max-height: 72vh; max-height: 72dvh; background: #000; border-radius: var(--radius-md); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
+.lightbox-figure .btn-danger-ghost { margin-top: 2px; }
+
+/* ---------- 17.7 Premios: tienda de cupones ---------- */
+.coupons-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.coupon-card {
+  position: relative; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: center; padding: 16px 16px 14px;
+  background: var(--surface-white); border: 1.5px dashed var(--mango-primary); border-radius: var(--radius-md); box-shadow: var(--shadow-soft);
+  animation: card-in 0.4s var(--ease-out) both;
+}
+.coupon-card:nth-child(even) { border-color: var(--salo-blue); }
+.coupon-card::before, .coupon-card::after {   /* muescas de ticket */
+  content: ""; position: absolute; top: 50%; width: 14px; height: 14px; margin-top: -7px; background: var(--bg-cream); border-radius: 50%;
+}
+.coupon-card::before { left: -8px; } .coupon-card::after { right: -8px; }
+.coupon-icon { display: grid; place-items: center; grid-row: span 2; width: 54px; height: 54px; font-size: 28px; background: linear-gradient(135deg, var(--mango-light), var(--spring-pink)); border-radius: 16px; }
+.coupon-title { font-family: var(--font-display); font-size: 16.5px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.coupon-desc { grid-column: 2; font-size: 13px; line-height: 1.45; color: var(--text-secondary); overflow-wrap: anywhere; }
+.coupon-footer { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.coupon-cost { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; font-size: 13px; font-weight: 800; color: var(--mango-deep); background: #FFF0DB; border-radius: var(--radius-pill); }
+.coupon-actions { display: flex; align-items: center; gap: 8px; }
+.coupon-edit-btn { display: grid; place-items: center; width: 40px; height: 40px; font-size: 16px; background: #F3EAE2; border-radius: 50%; }
+.coupon-redeem-btn { min-height: 40px; padding: 0 18px; font-size: 13.5px; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--mango-primary), var(--spring-coral)); border-radius: var(--radius-pill); box-shadow: 0 6px 14px rgba(245, 124, 0, 0.25); }
+.coupon-redeem-btn:disabled { opacity: 0.45; box-shadow: none; cursor: not-allowed; }
+
+.coupons-redeemed-list { display: flex; flex-direction: column; gap: 10px; }
+.coupon-redeemed-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface-white); border-radius: var(--radius-md); border-left: 5px solid var(--mango-primary); box-shadow: var(--shadow-soft); }
+.coupon-redeemed-item.is-fulfilled { border-left-color: var(--leaf-deep); background: #F3FAF4; }
+.coupon-redeemed-item.is-by-salo { border-left-color: var(--salo-blue); }
+.coupon-redeemed-main { flex: 1; min-width: 0; }
+.coupon-redeemed-title { font-size: 14.5px; font-weight: 700; overflow-wrap: anywhere; }
+.coupon-redeemed-meta { font-size: 12px; color: var(--text-secondary); }
+.coupon-state-pill { padding: 3px 10px; font-size: 11px; font-weight: 800; color: var(--mango-deep); background: #FFF0DB; border-radius: var(--radius-pill); }
+.coupon-redeemed-item.is-fulfilled .coupon-state-pill { color: var(--success-color); background: #DFF3E1; }
+
+/* ---------- 17.8 Reparto: fichas de personajes ---------- */
+.cast-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.cast-grid-protagonists { margin-bottom: 8px; }
+.cast-card {
+  position: relative; display: flex; flex-direction: column; gap: 10px; width: 100%; padding: 16px; text-align: left;
+  background: var(--surface-white); border: 1px solid rgba(255, 179, 71, 0.22); border-radius: var(--radius-md); box-shadow: var(--shadow-soft);
+  animation: card-in 0.4s var(--ease-out) both; transition: transform 0.2s var(--ease-out);
+}
+.cast-card:active { transform: scale(0.98); }
+.cast-card.is-simon { background: linear-gradient(160deg, #FFFDF9, #FFF3E0); border-color: var(--mango-light); }
+.cast-card.is-salo { background: linear-gradient(160deg, #FFFDF9, var(--salo-blue-soft)); border-color: var(--salo-blue); }
+.cast-card-head { display: flex; align-items: center; gap: 14px; }
+.cast-avatar {
+  display: grid; place-items: center; width: 72px; height: 72px; flex-shrink: 0; overflow: hidden; font-size: 34px;
+  background: linear-gradient(135deg, var(--mango-light), var(--spring-pink)); border: 3px solid var(--surface-white); border-radius: 50%; box-shadow: var(--shadow-soft);
+}
+.cast-card.is-salo .cast-avatar { background: linear-gradient(135deg, var(--salo-blue), var(--salo-blue-soft)); }
+.cast-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.cast-name { font-family: var(--font-display); font-size: 19px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.cast-role { display: inline-block; margin-top: 3px; padding: 2px 10px; font-size: 11.5px; font-weight: 800; color: #C2185B; background: #FDE8EF; border-radius: var(--radius-pill); }
+.cast-card.is-salo .cast-role { color: var(--salo-blue-ink); background: #B3E5FC; }
+.cast-stats { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.cast-stat { display: flex; gap: 8px; padding: 8px 12px; font-size: 13px; line-height: 1.4; background: rgba(255, 255, 255, 0.75); border-radius: var(--radius-sm); }
+.cast-stat-label { flex-shrink: 0; font-weight: 800; }
+.cast-stat-power .cast-stat-label { color: var(--success-color); }
+.cast-stat-weak .cast-stat-label { color: var(--error-color); }
+.cast-stat-value { min-width: 0; overflow-wrap: anywhere; }
+.cast-plans { display: flex; flex-wrap: wrap; gap: 6px; }
+.cast-plan-tag { padding: 3px 10px; font-size: 11px; font-weight: 700; color: var(--mango-deep); background: #FFF0DB; border-radius: var(--radius-pill); }
+.cast-edit-hint { position: absolute; top: 12px; right: 14px; font-size: 15px; opacity: 0.55; }
+
+.actor-photo-row { display: flex; align-items: center; gap: 14px; }
+.actor-photo-preview { position: relative; display: grid; place-items: center; width: 76px; height: 76px; overflow: hidden; background: linear-gradient(135deg, var(--mango-light), var(--spring-pink)); border-radius: 50%; border: 3px solid var(--surface-white); box-shadow: var(--shadow-soft); }
+.actor-photo-img { width: 100%; height: 100%; object-fit: cover; }
+.actor-photo-placeholder { font-size: 34px; }
+.plans-checklist { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; padding: 8px; background: var(--surface-white); border: 1.5px solid var(--border-soft); border-radius: var(--radius-sm); -webkit-overflow-scrolling: touch; }
+.checklist-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 8px; font-size: 14px; font-weight: 600; border-radius: 10px; cursor: pointer; }
+.checklist-item:active { background: #FFF3E0; }
+.checklist-item input { width: 22px; height: 22px; flex-shrink: 0; accent-color: var(--mango-deep); }
+.checklist-empty { padding: 10px; font-size: 13px; color: var(--text-secondary); text-align: center; }
+
+/* ---------- 17.9 Sabiduría y galleta de la fortuna ---------- */
+.sabiduria-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.sabiduria-card {
+  position: relative; display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; text-align: left;
+  background: var(--surface-white); border-left: 5px solid var(--mango-primary); border-radius: var(--radius-md); box-shadow: var(--shadow-soft);
+  animation: card-in 0.4s var(--ease-out) both;
+}
+.sabiduria-card[data-category="Animo"] { border-left-color: var(--mango-primary); background: linear-gradient(160deg, #FFFDF9, #FFF3E0); }
+.sabiduria-card[data-category="Charras"] { border-left-color: var(--spring-coral); background: linear-gradient(160deg, #FFFDF9, #FDE8EF); }
+.sabiduria-card[data-category="Idolos"] { border-left-color: var(--salo-blue-deep); background: linear-gradient(160deg, #FFFDF9, var(--salo-blue-soft)); }
+.sabiduria-category-tag { align-self: flex-start; padding: 2px 10px; font-size: 11px; font-weight: 800; color: var(--text-secondary); background: rgba(255, 255, 255, 0.8); border-radius: var(--radius-pill); }
+.sabiduria-phrase { font-family: var(--font-display); font-size: 16px; font-style: italic; font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
+.sabiduria-author { font-size: 12.5px; font-weight: 700; color: var(--text-secondary); }
+.sabiduria-card-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.sabiduria-edit-btn { display: grid; place-items: center; width: 38px; height: 38px; font-size: 15px; background: rgba(255, 255, 255, 0.85); border-radius: 50%; }
+
+.fortune-overlay { align-items: center; padding: calc(60px + var(--safe-top)) 18px calc(24px + var(--safe-bottom)); background: radial-gradient(circle at 50% 18%, rgba(255, 204, 128, 0.55), transparent 55%), rgba(45, 35, 30, 0.88); }
+.fortune-stage { display: flex; flex-direction: column; align-items: center; gap: 18px; width: 100%; max-width: 420px; }
+.fortune-cookie { font-size: 92px; line-height: 1; filter: drop-shadow(0 10px 22px rgba(255, 179, 71, 0.55)); animation: float 3s ease-in-out infinite; }
+.fortune-overlay.is-open .fortune-cookie { animation: cookie-crack 0.9s var(--ease-out) both, float 3s 0.9s ease-in-out infinite; }
+.fortune-cookie.is-cracked { animation: cookie-crack 0.9s var(--ease-out) both, float 3s 0.9s ease-in-out infinite; }
+.fortune-paper {
+  display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; padding: 26px 22px; text-align: center;
+  background: linear-gradient(160deg, #FFFDF9, #FFF3E0); border: 2px solid var(--mango-light); border-radius: var(--radius-lg);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35), 0 0 30px rgba(255, 179, 71, 0.35);
+}
+.fortune-overlay.is-open .fortune-paper { animation: fortune-unroll 0.7s 0.25s var(--ease-out) both; }
+.fortune-category { padding: 3px 12px; font-size: 12px; font-weight: 800; color: var(--mango-deep); background: #FFF0DB; border-radius: var(--radius-pill); }
+.fortune-phrase { font-family: var(--font-display); font-size: 22px; font-style: italic; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.fortune-author { font-size: 13.5px; font-weight: 700; color: var(--text-secondary); }
+.fortune-author:empty { display: none; }
+
+/* ---------- 17.10 Modales nuevos: identidad, reto, sorpresa, ajustes, trampa ---------- */
+.modal-title-center { text-align: center; }
+.modal-subtitle { margin: 6px 0 18px; text-align: center; font-size: 14px; color: var(--text-secondary); }
+.identity-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.identity-choice {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 130px; padding: 16px 10px;
+  border: 2.5px solid transparent; border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); transition: transform 0.18s var(--ease-out), border-color 0.2s ease;
+}
+.identity-choice:active { transform: scale(0.95); }
+.identity-choice-simon { background: linear-gradient(160deg, #FFF3E0, #FFE0B2); }
+.identity-choice-salo { background: linear-gradient(160deg, var(--salo-blue-soft), #B3E5FC); }
+.identity-choice.is-active { border-color: var(--mango-deep); }
+.identity-choice-salo.is-active { border-color: var(--salo-blue-deep); }
+.identity-choice-emoji { font-size: 44px; line-height: 1.1; }
+.identity-choice-name { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+.identity-choice-alias { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.identity-choices-compact .identity-choice { min-height: 84px; flex-direction: row; gap: 10px; }
+.identity-choices-compact .identity-choice-emoji { font-size: 30px; }
+.identity-choices-compact .identity-choice-name { font-size: 17px; }
+.modal-blocking .modal-sheet { padding-top: 14px; }
+
+/* Selector de ganador del reto: aparece solo con #plan-is-reto / #new-plan-is-reto activo */
+.winner-group { margin: 0; padding: 12px 14px 14px; background: #FFF6E8; border: 1.5px dashed var(--mango-primary); border-radius: var(--radius-sm); min-width: 0; }
+.winner-group legend { padding: 0 6px; }
+.winner-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.winner-option { display: block; cursor: pointer; }
+.winner-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.winner-pill { display: grid; place-items: center; min-height: 46px; padding: 6px; font-size: 13px; font-weight: 800; text-align: center; background: var(--surface-white); border: 2px solid var(--border-soft); border-radius: var(--radius-pill); transition: all 0.2s ease; }
+.winner-input:checked + .winner-pill { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--mango-primary), var(--mango-deep)); box-shadow: 0 6px 14px rgba(245, 124, 0, 0.28); }
+.winner-option:nth-child(2) .winner-input:checked + .winner-pill { background: linear-gradient(135deg, var(--salo-blue), var(--salo-blue-deep)); box-shadow: 0 6px 14px rgba(41, 182, 246, 0.3); }
+.winner-option:nth-child(3) .winner-input:checked + .winner-pill { background: linear-gradient(135deg, var(--leaf-green), var(--leaf-deep)); box-shadow: 0 6px 14px rgba(129, 199, 132, 0.35); }
+.winner-input:focus-visible + .winner-pill { outline: 3px solid var(--mango-deep); outline-offset: 2px; }
+
+/* Bloque de plan sorpresa bloqueado (vista del receptor) */
+.secret-lock { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 4px 0 8px; padding: 22px 16px; text-align: center; background: linear-gradient(160deg, #F3E5F5, #FDE8EF); border: 2px dashed #BA68C8; border-radius: var(--radius-md); }
+.secret-lock-emoji { font-size: 48px; animation: float 3s ease-in-out infinite; }
+.secret-lock-text { font-family: var(--font-display); font-size: 17px; font-weight: 700; line-height: 1.35; }
+
+/* Ajustes */
+.settings-section { margin-bottom: 18px; padding: 16px; background: var(--surface-white); border: 1px solid var(--border-soft); border-radius: var(--radius-md); }
+.settings-section > .btn { margin-top: 8px; }
+.settings-title { margin-bottom: 4px; font-family: var(--font-display); font-size: 17px; font-weight: 700; }
+.settings-hint { margin: 2px 0 10px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.trampa-partner { color: var(--mango-deep); }
+.trampa-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.trampa-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg-cream); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); }
+.trampa-item-text { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.trampa-item-btn { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; font-size: 15px; background: #F3EAE2; border-radius: 50%; }
+.trampa-form { margin-top: 6px; padding-top: 14px; border-top: 1px dashed var(--border-soft); }
+
+/* ---------- 17.11 Keyframes V3 ---------- */
+@keyframes heartbeat-soft {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 138, 128, 0.4); }
+  45% { transform: scale(1.07); box-shadow: 0 0 0 7px rgba(255, 138, 128, 0); }
+}
+@keyframes heartbeat-strong {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 138, 128, 0.7); }
+  30% { transform: scale(1.3); }
+  60% { transform: scale(0.95); box-shadow: 0 0 0 14px rgba(129, 212, 250, 0); }
+  100% { transform: scale(1); }
+}
+@keyframes infinity-glow {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(255, 179, 71, 0.65)) drop-shadow(0 0 10px rgba(129, 212, 250, 0.5)); }
+  50% { filter: drop-shadow(0 0 10px rgba(255, 138, 128, 0.85)) drop-shadow(0 0 18px rgba(129, 212, 250, 0.9)); }
+}
+@keyframes cookie-crack {
+  0% { transform: scale(0.3) rotate(-25deg); opacity: 0; }
+  55% { transform: scale(1.25) rotate(12deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes fortune-unroll {
+  0% { opacity: 0; transform: translateY(-30px) scaleY(0.2); }
+  100% { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+/* ---------- 17.12 Responsive V3 (solo amplía) ---------- */
+@media (max-width: 359px) {                    /* móviles muy estrechos */
+  .app-header-actions { gap: 4px; }
+  .btn-thinking { min-width: 42px; padding: 0 8px; }
+  .infinity-badge { font-size: 18px; gap: 8px; }
+  .winner-options { grid-template-columns: 1fr; }
+  .identity-choices { grid-template-columns: 1fr; }
+  .score-value { font-size: 28px; }
+}
+@media (min-width: 700px) {                    /* tablet */
+  .coupons-grid, .sabiduria-grid, .cast-grid { grid-template-columns: repeat(2, 1fr); }
+  .cast-grid-protagonists { grid-template-columns: repeat(2, 1fr); }
+  .cast-stats { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 1024px) {                   /* escritorio */
+  .coupons-grid, .sabiduria-grid { grid-template-columns: repeat(3, 1fr); }
+  .cast-grid { grid-template-columns: repeat(3, 1fr); }
+  .cast-grid-protagonists { grid-template-columns: repeat(2, 1fr); }
 }

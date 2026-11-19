@@ -1,19 +1,24 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  BITÁCORA DE PALITO DE MANGO Y PRIMAVERA · index.html
+  BITÁCORA DE PALITO DE MANGO Y PRIMAVERA · index.html  (V3 Upgrade)
   Responsabilidad: SOLO estructura semántica (DOM). Estilos -> styles.css,
-  lógica -> app.js (único <script>, con `defer`, al final del <body>).
-  Los IDs/clases son un CONTRATO con app.js: no renombrar.
+  lógica -> app.js (único <script> propio, con `defer`, al final del <body>).
+  CERO JavaScript inline. Los IDs/clases son un CONTRATO con app.js: no renombrar.
 
   Capas z-index (abajo -> arriba):
     app-shell 0 < app-header 100 < bottom-nav 200 < baul-fab 210
       < modal-overlay 500 < toast-container 900 < lock-screen 1000
 
   Clases de estado que añade/quita app.js:
-    .is-active (pestaña/vista/chip) · .is-hidden (display:none)
+    .is-active (pestaña/vista/chip/panel) · .is-hidden (display:none)
     .is-open (modal visible) · .is-unlocked (candado abierto)
     .is-rolling (slot de la ruleta girando) · .is-completed (plan hecho)
+    .is-spinning (icono sync) · .is-pulsing (botón háptico tras enviar)
+
+  Identificadores de usuario (contrato V3): "simon" y "salo".
+  Vistas principales (bottom-nav): view-inicio, view-baul, view-mural, view-premios.
+  Sub-vistas (se abren desde Inicio): view-reparto, view-sabiduria.
   ============================================================================
 -->
 <html lang="es">
@@ -22,14 +27,14 @@
   <!-- viewport-fit=cover: pantalla completa bajo el notch y habilita env(safe-area-inset-*) -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <title>Bitácora de Palito de Mango y Primavera</title>
-  <meta name="description" content="Bitácora romántica de Simón & Salomé: baúl de planes, mural de recuerdos y premios.">
+  <meta name="description" content="Bitácora romántica de Simón &amp; Salomé: baúl de planes, mural de recuerdos, premios, reparto y sabiduría.">
   <meta name="theme-color" content="#FFB347">
 
   <!-- Metadatos para instalar como PWA en iOS -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Mango & Primavera">
+  <meta name="apple-mobile-web-app-title" content="Mango &amp; Primavera">
   <link rel="manifest" href="manifest.json">
 
   <!-- Favicon SVG inline (data URI): cero peticiones externas, cero 404 -->
@@ -39,8 +44,12 @@
   <!-- Tipografías: Fraunces (títulos editoriales) + Plus Jakarta Sans (interfaz) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500;1,9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+
+  <!-- OneSignal Web Push SDK v16 (notificaciones). La inicialización
+       (window.OneSignalDeferred.push) vive en app.js: aquí NO hay JS inline. -->
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 </head>
 
 <body>
@@ -50,7 +59,7 @@
        app.js añade `.is-unlocked` al acertar y se desvanece.
        ========================================================================== -->
   <section id="lock-screen" class="lock-screen" aria-labelledby="lock-title">
-    <!-- app.js inyecta aquí <span class="confetti-piece"> -->
+    <!-- app.js inyecta aquí <span class="confetti-piece"> (mango, coral, verde y azul cielo) -->
     <div id="confetti-container" class="confetti-container" aria-hidden="true"></div>
 
     <!-- Tarjeta: animaciones .shake-error (fallo) / .unlock-success (acierto) -->
@@ -74,38 +83,85 @@
 
     <!-- ---------- Cabecera sticky ---------- -->
     <header id="app-header" class="app-header">
-      <div class="app-header-text">
-        <h1 class="app-title">Bitácora de Palito de Mango y Primavera</h1>
-        <span class="app-badge">Simón &amp; Salomé</span>
+      <div class="app-header-top">
+        <div class="app-header-text">
+          <!-- Título dinámico: app.js lo cambia según la vista activa -->
+          <h1 id="app-header-title" class="app-title">Bitácora de Palito de Mango y Primavera</h1>
+          <!-- Insignia dinámica (p. ej. "Simón &amp; Salomé") -->
+          <span id="app-header-subtitle" class="app-badge">Simón &amp; Salomé</span>
+        </div>
+
+        <div class="app-header-actions">
+          <!-- Botón háptico latente: vibra + push "te estoy pensando" -->
+          <button id="btn-thinking-of-you" class="btn-thinking" type="button" aria-label="Pensando en ti" title="Pensando en ti">
+            <span class="thinking-emoji" aria-hidden="true">🥭🌸</span>
+          </button>
+          <button id="btn-sync-refresh" class="btn-icon" type="button" aria-label="Sincronizar ahora" title="Sincronizar ahora">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M18.5 2v4h-4"/><path d="M5.5 22v-4h4"/>
+            </svg>
+          </button>
+          <button id="btn-open-settings" class="btn-icon" type="button" aria-label="Ajustes" title="Ajustes">
+            <span class="btn-icon-emoji" aria-hidden="true">⚙️</span>
+          </button>
+        </div>
       </div>
-      <div class="app-header-actions">
+
+      <div class="app-header-meta">
+        <!-- Indicador de usuario. app.js añade .is-simon / .is-salo / .is-unknown -->
+        <span id="user-identity-pill" class="identity-pill is-unknown" role="status">
+          <span id="user-identity-emoji" class="identity-pill-emoji" aria-hidden="true">👤</span>
+          <span id="user-identity-name" class="identity-pill-name">Sin identificar</span>
+        </span>
         <!-- Estados: .is-online / .is-local / .is-syncing -->
         <span id="sync-status-badge" class="sync-badge is-local" role="status" aria-live="polite">
           <span class="sync-dot" aria-hidden="true"></span>
           <span class="sync-label">Local</span>
         </span>
-        <button id="btn-sync-refresh" class="btn-icon" type="button" aria-label="Sincronizar ahora" title="Sincronizar ahora">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M18.5 2v4h-4"/><path d="M5.5 22v-4h4"/>
-          </svg>
-        </button>
       </div>
     </header>
 
-    <!-- ---------- Contenido: 4 vistas, solo una `.is-active` ---------- -->
+    <!-- ---------- Contenido: vistas, solo una `.is-active` ---------- -->
     <main id="app-main" class="app-main">
 
       <!-- ===================== VISTA 1: INICIO ===================== -->
       <section id="view-inicio" class="app-view is-active" aria-label="Inicio">
+        <h2 class="view-title">Nuestro Refugio</h2>
+        <p class="view-motto">Donde el mundo se apaga y nosotros empezamos.</p>
 
-        <!-- Manifiesto editorial (texto exacto) -->
+        <!-- Manifiesto Oficial (texto exacto) -->
         <article class="manifesto-card">
           <h2 class="manifesto-title">Bitácora de Palito de Mango y Primavera. Donde el mundo exterior se apaga y nosotros empezamos a ser felices.</h2>
           <p class="manifesto-text">Este es nuestro refugio para amarnos, cuidar nuestra salud mental y regar nuestro amor sin importar lo que pase afuera. Por eso, aquí queda estrictamente prohibido hablar de la EIA, de exámenes o de la rutina. Aquí solo importamos tú y yo.</p>
           <p class="manifesto-text">Esta bitácora es el resumen y la construcción de una historia hermosa entre dos personas que no se conocían, pero que se necesitaban sin saberlo. Todo pasa por una razón, y vamos a aprovecharla al máximo para ser felices y construir recuerdos inolvidables. No importa el tiempo, la distancia o el dinero; lo único que importa es que estemos juntos para todo lo nuevo.</p>
+
+          <!-- Badge estelar: 2026 — ∞ (infinito grande, grueso y resplandeciente) -->
+          <div class="infinity-badge" aria-label="2026 — infinito">
+            <span class="infinity-year">2026</span>
+            <span class="infinity-dash" aria-hidden="true">—</span>
+            <span class="infinity-symbol" aria-hidden="true">∞</span>
+          </div>
         </article>
 
-        <!-- Progreso global de planes -->
+        <!-- Marcador Simón vs Salo -->
+        <div class="scoreboard-card" aria-label="Marcador de la pareja">
+          <div class="score-side score-side-simon">
+            <span class="score-emoji" aria-hidden="true">🥭</span>
+            <span class="score-name">Simón</span>
+            <strong id="score-simon" class="score-value">0</strong>
+            <span class="score-unit">pts</span>
+          </div>
+          <div class="score-vs" aria-hidden="true">VS</div>
+          <div class="score-side score-side-salo">
+            <span class="score-emoji" aria-hidden="true">🌸</span>
+            <span class="score-name">Salo</span>
+            <strong id="score-salo" class="score-value">0</strong>
+            <span class="score-unit">pts</span>
+          </div>
+          <p class="score-daily">Trivia de hoy: <span id="trivia-daily-counter" class="score-daily-count">0 / 3</span> con puntos</p>
+        </div>
+
+        <!-- Tracker tricolor de planes (Mango -> Coral -> Azul Cielo) -->
         <div class="progress-card">
           <div class="progress-head">
             <span id="progress-count-text" class="progress-count">0 / 33 planes completados</span>
@@ -114,6 +170,14 @@
           <!-- app.js controla style.width de #progress-bar-fill -->
           <div class="progress-track"><div id="progress-bar-fill" class="progress-bar-fill"></div></div>
         </div>
+
+        <!-- Accesos destacados -->
+        <button id="btn-open-sabiduria" class="feature-link feature-link-sabiduria" type="button">
+          🩹 Para cuando necesites sabiduría en tus malos momentos ➡️
+        </button>
+        <button id="btn-open-reparto" class="feature-link feature-link-reparto" type="button">
+          🎭 El Reparto Oficial de Nuestra Historia ➡️
+        </button>
 
         <!-- Ruleta del destino (slot-machine) -->
         <div class="ruleta-card">
@@ -139,6 +203,15 @@
             <button id="btn-open-winner-plan" class="btn btn-ghost btn-xl" type="button">Ver detalle del plan</button>
           </div>
         </div>
+
+        <!-- Playlist oficial de Spotify (Embed) -->
+        <div class="spotify-card">
+          <h2 class="card-title">🎶 Nuestra Playlist</h2>
+          <iframe id="spotify-embed" class="spotify-embed" title="Playlist de Spotify de Simón y Salomé"
+                  src="https://open.spotify.com/embed/playlist/6PcKAuKbcFLLqUVWWVefyK?utm_source=generator&amp;theme=0"
+                  width="100%" height="352" frameborder="0" loading="lazy"
+                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+        </div>
       </section>
 
 
@@ -146,48 +219,88 @@
       <section id="view-baul" class="app-view" aria-label="El Baúl de planes">
         <h2 class="view-title">El Baúl de Planes</h2>
 
-        <div id="baul-category-filter" class="filter-bar" role="group" aria-label="Filtrar por categoría">
-          <button class="category-chip is-active" type="button" data-category="Todos">Todos</button>
-          <button class="category-chip" type="button" data-category="Pelis y Juegos">🎬 Pelis y Juegos</button>
-          <button class="category-chip" type="button" data-category="Gastronomía">🍕 Gastronomía</button>
-          <button class="category-chip" type="button" data-category="Rumbas">🍻 Rumbas</button>
-          <button class="category-chip" type="button" data-category="Relax">🛋️ Relax</button>
+        <!-- Conmutador estricto Pendientes / Completados (paneles aislados) -->
+        <div class="segmented-switch" role="tablist" aria-label="Estado de los planes">
+          <button id="baul-tab-pending" class="segmented-btn is-active" type="button" role="tab" aria-selected="true" aria-controls="baul-panel-pending">
+            ⏳ Pendientes <span id="baul-pending-count" class="segmented-count">0</span>
+          </button>
+          <button id="baul-tab-completed" class="segmented-btn" type="button" role="tab" aria-selected="false" aria-controls="baul-panel-completed">
+            ✅ Completados <span id="baul-completed-count" class="segmented-count">0</span>
+          </button>
         </div>
 
-        <div id="baul-status-filter" class="filter-bar" role="group" aria-label="Filtrar por estado">
-          <button class="status-chip is-active" type="button" data-status="Todos">Todos</button>
-          <button class="status-chip" type="button" data-status="Pendientes">⏳ Pendientes</button>
-          <button class="status-chip" type="button" data-status="Completados">✅ Completados</button>
+        <!-- PANEL PENDIENTES -->
+        <div id="baul-panel-pending" class="baul-panel is-active" role="tabpanel" aria-labelledby="baul-tab-pending">
+          <p class="view-motto">Lo mejor de nosotros está por venir.</p>
+
+          <!-- Buscador independiente de Pendientes (coincidencia por título) -->
+          <div class="search-box">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input id="search-pending-input" class="search-input" type="search" inputmode="search" enterkeyhint="search"
+                   autocomplete="off" placeholder="Buscar plan pendiente por título…" aria-label="Buscar entre planes pendientes">
+            <button id="btn-clear-pending-search" class="search-clear is-hidden" type="button" aria-label="Borrar búsqueda de pendientes">✕</button>
+          </div>
+
+          <div id="baul-category-filter" class="filter-bar" role="group" aria-label="Filtrar por categoría">
+            <button class="category-chip is-active" type="button" data-category="Todos">Todos</button>
+            <button class="category-chip" type="button" data-category="Pelis y Juegos">🎬 Pelis y Juegos</button>
+            <button class="category-chip" type="button" data-category="Gastronomía">🍕 Gastronomía</button>
+            <button class="category-chip" type="button" data-category="Rumbas">🍻 Rumbas</button>
+            <button class="category-chip" type="button" data-category="Relax">🛋️ Relax</button>
+          </div>
+
+          <!-- app.js inserta .plan-card SOLO de planes pendientes -->
+          <div id="plans-pending-grid" class="baul-plans-grid"></div>
+
+          <div id="plans-pending-empty" class="empty-state is-hidden">
+            <div class="empty-emoji" aria-hidden="true">🥭</div>
+            <h3 class="empty-title">No hay planes pendientes aquí</h3>
+            <p class="empty-text">Prueba otra búsqueda o categoría, o toca el botón <strong>+</strong> para añadir uno nuevo.</p>
+          </div>
+
+          <!-- FAB: position:fixed. Vive dentro del panel Pendientes: solo se ve con ese panel activo -->
+          <button id="btn-fab-add-plan" class="baul-fab" type="button" aria-label="Añadir plan nuevo">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
         </div>
 
-        <!-- app.js inserta .plan-card (+ .is-completed / .highlight-card VIP) -->
-        <div id="baul-plans-grid" class="baul-plans-grid"></div>
+        <!-- PANEL COMPLETADOS -->
+        <div id="baul-panel-completed" class="baul-panel is-hidden" role="tabpanel" aria-labelledby="baul-tab-completed">
+          <p class="view-motto">Memorias que se quedan para siempre.</p>
 
-        <div id="baul-empty" class="empty-state is-hidden">
-          <div class="empty-emoji" aria-hidden="true">🥭</div>
-          <h3 class="empty-title">No hay planes con estos filtros</h3>
-          <p class="empty-text">Prueba otra categoría o toca el botón <strong>+</strong> para añadir uno nuevo.</p>
+          <!-- Buscador independiente de Completados (coincidencia por título) -->
+          <div class="search-box">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input id="search-completed-input" class="search-input" type="search" inputmode="search" enterkeyhint="search"
+                   autocomplete="off" placeholder="Buscar plan completado por título…" aria-label="Buscar entre planes completados">
+            <button id="btn-clear-completed-search" class="search-clear is-hidden" type="button" aria-label="Borrar búsqueda de completados">✕</button>
+          </div>
+
+          <!-- app.js inserta .plan-card.is-completed SOLO de planes completados -->
+          <div id="plans-completed-grid" class="baul-plans-grid"></div>
+
+          <div id="plans-completed-empty" class="empty-state is-hidden">
+            <div class="empty-emoji" aria-hidden="true">🌸</div>
+            <h3 class="empty-title">Aún no hay planes completados</h3>
+            <p class="empty-text">Cuando cumplamos un plan del Baúl, su recuerdo vivirá aquí.</p>
+          </div>
         </div>
-
-        <!-- FAB: position:fixed. Está DENTRO de la vista, así que solo se ve con el Baúl activo -->
-        <button id="btn-fab-add-plan" class="baul-fab" type="button" aria-label="Añadir plan nuevo">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
       </section>
 
 
       <!-- ===================== VISTA 3: EL MURAL ===================== -->
       <section id="view-mural" class="app-view" aria-label="El Mural de recuerdos">
         <h2 class="view-title">El Mural</h2>
-        <button id="btn-upload-mural" class="btn btn-primary btn-xl upload-btn" type="button">📸 Subir recuerdo al Mural</button>
+        <p class="view-motto">Instantes que no cambio por nada.</p>
+        <button id="btn-upload-mural" class="btn btn-primary btn-xl upload-btn" type="button">📸 Subir foto o video al Mural</button>
 
-        <!-- Masonry Pinterest: app.js inserta .mural-card -->
+        <!-- Masonry Pinterest: app.js inserta .mural-card (con .video-poster + overlay ▶️ si es video) -->
         <div id="mural-grid" class="pinterest-grid"></div>
 
         <div id="mural-empty" class="empty-state is-hidden">
           <div class="empty-emoji" aria-hidden="true">🌸</div>
           <h3 class="empty-title">El mural aún está vacío</h3>
-          <p class="empty-text">Sube la primera foto para empezar a llenarlo de recuerdos.</p>
+          <p class="empty-text">Sube la primera foto o video para empezar a llenarlo de recuerdos.</p>
         </div>
       </section>
 
@@ -195,9 +308,102 @@
       <!-- ===================== VISTA 4: PREMIOS ===================== -->
       <section id="view-premios" class="app-view" aria-label="Premios">
         <h2 class="view-title">Premios</h2>
-        <p class="premios-intro">¿Para qué sirve esta sección? La idea es que cada vez que completemos 5 o 10 planes del Baúl, desbloqueemos recompensas especiales. Aquí están nuestras ideas iniciales para que escojamos juntos cuáles dejamos oficiales y si dejamos activa esta pestaña</p>
-        <!-- app.js inserta .premios-category > .premios-grid > .premio-idea-card -->
-        <div id="premios-board" class="premios-board"></div>
+        <p class="view-motto">El amor también se celebra jugando.</p>
+
+        <!-- Scoreboard (saldo de puntos de cada uno) -->
+        <div class="scoreboard-card scoreboard-compact" aria-label="Saldo de puntos">
+          <div class="score-side score-side-simon">
+            <span class="score-emoji" aria-hidden="true">🥭</span>
+            <span class="score-name">Simón</span>
+            <strong id="premios-score-simon" class="score-value">0</strong>
+            <span class="score-unit">pts</span>
+          </div>
+          <div class="score-vs" aria-hidden="true">VS</div>
+          <div class="score-side score-side-salo">
+            <span class="score-emoji" aria-hidden="true">🌸</span>
+            <span class="score-name">Salo</span>
+            <strong id="premios-score-salo" class="score-value">0</strong>
+            <span class="score-unit">pts</span>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <h3 class="section-title">🎟️ Tienda de Cupones</h3>
+          <button id="btn-add-coupon" class="btn btn-soft btn-sm" type="button">+ Nuevo Cupón</button>
+        </div>
+        <!-- app.js inserta .coupon-card (icono, título, descripción, costo, botón Canjear / ✏️) -->
+        <div id="coupons-catalog-grid" class="coupons-grid"></div>
+        <div id="coupons-catalog-empty" class="empty-state empty-state-compact is-hidden">
+          <div class="empty-emoji" aria-hidden="true">🎟️</div>
+          <h3 class="empty-title">No hay cupones disponibles</h3>
+          <p class="empty-text">Crea uno con <strong>+ Nuevo Cupón</strong>.</p>
+        </div>
+
+        <div class="section-head">
+          <h3 class="section-title">✨ Cupones Activos y Cumplidos</h3>
+        </div>
+        <!-- app.js inserta .coupon-redeemed-item -->
+        <div id="coupons-redeemed-list" class="coupons-redeemed-list"></div>
+        <div id="coupons-redeemed-empty" class="empty-state empty-state-compact is-hidden">
+          <p class="empty-text">Aún no hay cupones canjeados.</p>
+        </div>
+      </section>
+
+
+      <!-- ===================== SUB-VISTA: EL REPARTO ===================== -->
+      <section id="view-reparto" class="app-view" aria-label="El Reparto Oficial">
+        <button id="btn-back-from-reparto" class="btn-back" type="button">⬅️ Volver al Inicio</button>
+        <h2 class="view-title">El Reparto Oficial</h2>
+
+        <h3 class="section-title">🌟 Los Protagonistas</h3>
+        <p class="view-motto">Los protagonistas de la mejor y más dulce historia.</p>
+        <!-- app.js inserta .cast-card (tipo protagonista) -->
+        <div id="protagonists-grid" class="cast-grid cast-grid-protagonists"></div>
+
+        <div class="section-head section-head-cast">
+          <div>
+            <h3 class="section-title">🎬 Actores de Reparto</h3>
+            <p class="view-motto view-motto-tight">Porque toda gran historia necesita de sus fieles secuaces.</p>
+          </div>
+          <button id="btn-add-actor" class="btn btn-soft btn-sm" type="button">+ Añadir Actor</button>
+        </div>
+        <!-- app.js inserta .cast-card (tipo secundario) -->
+        <div id="actors-grid" class="cast-grid"></div>
+        <div id="actors-empty" class="empty-state empty-state-compact is-hidden">
+          <div class="empty-emoji" aria-hidden="true">🎬</div>
+          <h3 class="empty-title">Aún no hay actores de reparto</h3>
+          <p class="empty-text">Añade a la familia, amigos y mascotas con <strong>+ Añadir Actor</strong>.</p>
+        </div>
+      </section>
+
+
+      <!-- ===================== SUB-VISTA: SABIDURÍA ===================== -->
+      <section id="view-sabiduria" class="app-view" aria-label="Sabiduría para los malos momentos">
+        <button id="btn-back-from-sabiduria" class="btn-back" type="button">⬅️ Volver al Inicio</button>
+        <h2 class="view-title">Sabiduría para los malos momentos</h2>
+        <p class="view-motto">Para cuando necesites sabiduría en tus malos momentos.</p>
+
+        <button id="btn-random-sabiduria" class="btn btn-primary btn-xl btn-fortune" type="button">🎲 Necesito una frase ya 💛</button>
+
+        <!-- Chips de categoría: data-category = Todas | Animo | Charras | Idolos -->
+        <div id="sabiduria-filter-bar" class="filter-bar" role="group" aria-label="Filtrar frases por categoría">
+          <button class="category-chip is-active" type="button" data-category="Todas">Todas</button>
+          <button class="category-chip" type="button" data-category="Animo">💛 Para levantar el ánimo</button>
+          <button class="category-chip" type="button" data-category="Charras">😂 Frases charras de los dos</button>
+          <button class="category-chip" type="button" data-category="Idolos">🌟 De nuestros ídolos</button>
+        </div>
+
+        <div class="section-head">
+          <h3 class="section-title">📖 Nuestro libro de frases</h3>
+          <button id="btn-add-sabiduria" class="btn btn-soft btn-sm" type="button">+ Añadir frase</button>
+        </div>
+        <!-- app.js inserta .sabiduria-card -->
+        <div id="sabiduria-grid" class="sabiduria-grid"></div>
+        <div id="sabiduria-empty" class="empty-state empty-state-compact is-hidden">
+          <div class="empty-emoji" aria-hidden="true">💛</div>
+          <h3 class="empty-title">No hay frases en esta categoría</h3>
+          <p class="empty-text">Añade una con <strong>+ Añadir frase</strong>.</p>
+        </div>
       </section>
 
     </main>
@@ -225,7 +431,28 @@
        [data-close-modal="id"], tocando el fondo o con Escape (app.js).
        ========================================================================== -->
 
-  <!-- ---------- 3.1 Detalle del plan ---------- -->
+  <!-- ---------- 3.1 Identidad (primera vez en el teléfono). Sin botón de cerrar ---------- -->
+  <div id="identity-modal" class="modal-overlay modal-blocking" role="dialog" aria-modal="true" aria-labelledby="identity-modal-title">
+    <div class="modal-sheet identity-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <h2 id="identity-modal-title" class="modal-title modal-title-center">¿Quién tiene este teléfono?</h2>
+      <p class="modal-subtitle">Elige una sola vez; quedará guardado en este dispositivo.</p>
+      <div class="identity-choices">
+        <button id="btn-identity-simon" class="identity-choice identity-choice-simon" type="button" data-identity="simon">
+          <span class="identity-choice-emoji" aria-hidden="true">🥭</span>
+          <span class="identity-choice-name">Simón</span>
+          <span class="identity-choice-alias">Palito de Mango</span>
+        </button>
+        <button id="btn-identity-salo" class="identity-choice identity-choice-salo" type="button" data-identity="salo">
+          <span class="identity-choice-emoji" aria-hidden="true">🌸</span>
+          <span class="identity-choice-name">Salomé</span>
+          <span class="identity-choice-alias">Primavera</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- 3.2 Detalle / edición de plan ---------- -->
   <div id="plan-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="plan-modal-title">
     <div class="modal-sheet">
       <div class="modal-grabber" aria-hidden="true"></div>
@@ -237,35 +464,122 @@
         <div id="plan-modal-badges" class="plan-badges"></div>
       </div>
 
+      <!-- Asimetría de planes sorpresa: el receptor solo ve este bloque (app.js quita .is-hidden) -->
+      <div id="plan-modal-secret-lock" class="secret-lock is-hidden">
+        <div class="secret-lock-emoji" aria-hidden="true">🎁</div>
+        <p id="plan-modal-secret-text" class="secret-lock-text">🎁 Plan Sorpresa ⏳ Se desbloquea pronto</p>
+      </div>
+
+      <!-- Detalles completos (se ocultan para el receptor de un plan sorpresa bloqueado) -->
       <form id="form-plan-detail" class="modal-form" autocomplete="off">
-        <!-- Interruptor "completado": input oculto + pista visual -->
-        <label class="switch-row">
-          <input type="checkbox" id="plan-modal-completed" class="switch-input">
-          <span class="switch-ui" aria-hidden="true"></span>
-          <span id="plan-modal-status-label" class="switch-label">Pendiente</span>
-        </label>
+        <div id="plan-modal-details" class="modal-form">
 
-        <label class="field-group">
-          <span class="field-label">Nuestra anécdota</span>
-          <textarea id="plan-modal-anecdote" class="field-control field-textarea" rows="4" maxlength="800" placeholder="¿Cómo fue este plan? Cuéntalo aquí…"></textarea>
-        </label>
+          <!-- Edición de datos del plan -->
+          <label class="field-group">
+            <span class="field-label">Título</span>
+            <input type="text" id="plan-edit-title" class="field-control" required maxlength="90" placeholder="Título del plan">
+          </label>
+          <div class="field-row">
+            <label class="field-group">
+              <span class="field-label">Categoría</span>
+              <select id="plan-edit-category" class="field-control">
+                <option value="Pelis y Juegos">Pelis y Juegos</option>
+                <option value="Gastronomía">Gastronomía</option>
+                <option value="Rumbas">Rumbas</option>
+                <option value="Relax">Relax</option>
+              </select>
+            </label>
+            <label class="field-group">
+              <span class="field-label">Clima</span>
+              <select id="plan-edit-weather" class="field-control">
+                <option value="☀️">☀️ Sol</option>
+                <option value="🌧️">🌧️ Lluvia</option>
+              </select>
+            </label>
+          </div>
+          <div class="field-row">
+            <label class="field-group">
+              <span class="field-label">Energía</span>
+              <select id="plan-edit-energy" class="field-control">
+                <option value="🔋">🔋</option>
+                <option value="🔋🔋">🔋🔋</option>
+                <option value="🔋🔋🔋">🔋🔋🔋</option>
+              </select>
+            </label>
+            <label class="field-group">
+              <span class="field-label">Emoji</span>
+              <input type="text" id="plan-edit-emoji" class="field-control" maxlength="4" placeholder="✨">
+            </label>
+          </div>
 
-        <label class="photo-drop" for="plan-modal-photo-input">
-          <span class="photo-drop-icon" aria-hidden="true">📷</span>
-          <span class="photo-drop-text">Añadir foto del plan</span>
-        </label>
-        <input type="file" id="plan-modal-photo-input" class="visually-hidden-input" accept="image/*">
-        <div id="plan-modal-photo-wrapper" class="photo-preview-wrapper is-hidden">
-          <img id="plan-modal-photo-preview" class="photo-preview-img" alt="Vista previa de la foto del plan">
-          <span id="plan-modal-photo-meta" class="photo-compression-meta"></span>
+          <!-- Interruptor "completado": input oculto + pista visual -->
+          <label class="switch-row">
+            <input type="checkbox" id="plan-modal-completed" class="switch-input">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span id="plan-modal-status-label" class="switch-label">Pendiente</span>
+          </label>
+
+          <!-- Reto de pareja: el selector de ganador aparece SOLO si el switch está activo -->
+          <label class="switch-row">
+            <input type="checkbox" id="plan-is-reto" class="switch-input">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span class="switch-label">¿Es un reto de pareja? 🥊</span>
+          </label>
+          <fieldset id="plan-winner-group" class="winner-group is-hidden">
+            <legend class="field-label">¿Quién ganó el reto?</legend>
+            <div class="winner-options">
+              <label class="winner-option">
+                <input type="radio" name="plan-winner" id="plan-winner-simon" value="simon" class="winner-input">
+                <span class="winner-pill">🥭 Simón</span>
+              </label>
+              <label class="winner-option">
+                <input type="radio" name="plan-winner" id="plan-winner-salo" value="salo" class="winner-input">
+                <span class="winner-pill">🌸 Salo</span>
+              </label>
+              <label class="winner-option">
+                <input type="radio" name="plan-winner" id="plan-winner-empate" value="empate" class="winner-input">
+                <span class="winner-pill">🤝 Empate</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <!-- Plan sorpresa: la fecha de desbloqueo aparece SOLO si el switch está activo -->
+          <label class="switch-row">
+            <input type="checkbox" id="plan-is-secreto" class="switch-input">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span class="switch-label">¿Es un plan sorpresa? 🤫</span>
+          </label>
+          <label id="plan-unlock-group" class="field-group is-hidden">
+            <span class="field-label">Fecha de desbloqueo</span>
+            <input type="date" id="plan-unlock-date" class="field-control">
+          </label>
+
+          <label class="field-group">
+            <span class="field-label">Nuestra anécdota</span>
+            <textarea id="plan-modal-anecdote" class="field-control field-textarea" rows="4" maxlength="800" placeholder="¿Cómo fue este plan? Cuéntalo aquí…"></textarea>
+          </label>
+
+          <!-- Medio del plan: foto o video -->
+          <label class="photo-drop" for="plan-modal-media-input">
+            <span class="photo-drop-icon" aria-hidden="true">📷🎥</span>
+            <span class="photo-drop-text">Añadir foto o video del plan</span>
+          </label>
+          <input type="file" id="plan-modal-media-input" class="visually-hidden-input" accept="image/*,video/*">
+          <div id="plan-modal-media-wrapper" class="photo-preview-wrapper is-hidden">
+            <img id="plan-modal-photo-preview" class="photo-preview-img is-hidden" alt="Vista previa de la foto del plan">
+            <video id="plan-modal-video-preview" class="photo-preview-video is-hidden" controls playsinline preload="metadata"></video>
+            <span id="plan-modal-media-meta" class="photo-compression-meta"></span>
+            <button id="btn-delete-plan-media" class="btn-media-delete" type="button" aria-label="Quitar foto o video del plan">🗑️</button>
+          </div>
+
+          <button id="btn-save-plan-detail" class="btn btn-primary btn-xl" type="submit">Guardar</button>
+          <button id="btn-delete-plan" class="btn btn-danger btn-xl" type="button">🗑️ Eliminar plan</button>
         </div>
-
-        <button id="btn-save-plan-detail" class="btn btn-primary btn-xl" type="submit">Guardar</button>
       </form>
     </div>
   </div>
 
-  <!-- ---------- 3.2 Añadir plan ---------- -->
+  <!-- ---------- 3.3 Añadir plan ---------- -->
   <div id="add-plan-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="add-plan-title">
     <div class="modal-sheet">
       <div class="modal-grabber" aria-hidden="true"></div>
@@ -311,12 +625,48 @@
             <input type="text" id="new-plan-emoji" class="field-control" maxlength="4" value="✨" placeholder="✨">
           </label>
         </div>
+
+        <!-- Reto de pareja -->
+        <label class="switch-row">
+          <input type="checkbox" id="new-plan-is-reto" class="switch-input">
+          <span class="switch-ui" aria-hidden="true"></span>
+          <span class="switch-label">¿Es un reto de pareja? 🥊</span>
+        </label>
+        <fieldset id="new-plan-winner-group" class="winner-group is-hidden">
+          <legend class="field-label">¿Quién ganó el reto?</legend>
+          <div class="winner-options">
+            <label class="winner-option">
+              <input type="radio" name="new-plan-winner" id="new-plan-winner-simon" value="simon" class="winner-input">
+              <span class="winner-pill">🥭 Simón</span>
+            </label>
+            <label class="winner-option">
+              <input type="radio" name="new-plan-winner" id="new-plan-winner-salo" value="salo" class="winner-input">
+              <span class="winner-pill">🌸 Salo</span>
+            </label>
+            <label class="winner-option">
+              <input type="radio" name="new-plan-winner" id="new-plan-winner-empate" value="empate" class="winner-input">
+              <span class="winner-pill">🤝 Empate</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- Plan sorpresa -->
+        <label class="switch-row">
+          <input type="checkbox" id="new-plan-is-secreto" class="switch-input">
+          <span class="switch-ui" aria-hidden="true"></span>
+          <span class="switch-label">¿Es un plan sorpresa? 🤫</span>
+        </label>
+        <label id="new-plan-unlock-group" class="field-group is-hidden">
+          <span class="field-label">Fecha de desbloqueo</span>
+          <input type="date" id="new-plan-unlock-date" class="field-control">
+        </label>
+
         <button id="btn-submit-new-plan" class="btn btn-primary btn-xl" type="submit">Añadir al Baúl</button>
       </form>
     </div>
   </div>
 
-  <!-- ---------- 3.3 Subir recuerdo al mural ---------- -->
+  <!-- ---------- 3.4 Subir recuerdo al mural (foto o video) ---------- -->
   <div id="mural-upload-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="mural-upload-title">
     <div class="modal-sheet">
       <div class="modal-grabber" aria-hidden="true"></div>
@@ -326,20 +676,22 @@
       </div>
 
       <form id="form-mural-upload" class="modal-form" autocomplete="off">
-        <label class="photo-drop" for="mural-photo-input">
-          <span class="photo-drop-icon" aria-hidden="true">📸</span>
-          <span class="photo-drop-text">Toca para elegir una foto</span>
+        <label class="photo-drop" for="mural-media-input">
+          <span class="photo-drop-icon" aria-hidden="true">📸🎥</span>
+          <span class="photo-drop-text">Toca para elegir una foto o un video</span>
         </label>
-        <input type="file" id="mural-photo-input" class="visually-hidden-input" accept="image/*">
+        <input type="file" id="mural-media-input" class="visually-hidden-input" accept="image/*,video/*">
         <div id="mural-preview-wrapper" class="photo-preview-wrapper is-hidden">
-          <img id="mural-preview-img" class="photo-preview-img" alt="Vista previa del recuerdo">
-          <span id="mural-photo-meta" class="photo-compression-meta"></span>
+          <img id="mural-preview-img" class="photo-preview-img is-hidden" alt="Vista previa del recuerdo">
+          <video id="mural-preview-video" class="photo-preview-video is-hidden" controls playsinline preload="metadata"></video>
+          <span id="mural-media-meta" class="photo-compression-meta"></span>
         </div>
 
         <label class="field-group">
           <span class="field-label">Descripción</span>
           <input type="text" id="mural-caption-input" class="field-control" maxlength="120" placeholder="Una frase para recordarlo">
         </label>
+        <!-- Fecha limpia (solo día, sin hora) -->
         <label class="field-group">
           <span class="field-label">Fecha</span>
           <input type="date" id="mural-date-input" class="field-control">
@@ -349,16 +701,244 @@
     </div>
   </div>
 
-  <!-- ---------- 3.4 Lightbox (foto a pantalla completa, fondo oscuro) ---------- -->
-  <div id="lightbox-modal" class="modal-overlay lightbox" role="dialog" aria-modal="true" aria-label="Foto ampliada">
+  <!-- ---------- 3.5 Lightbox (foto o video a pantalla completa, fondo oscuro) ---------- -->
+  <div id="lightbox-modal" class="modal-overlay lightbox" role="dialog" aria-modal="true" aria-label="Recuerdo ampliado">
     <button class="modal-close modal-close-floating" type="button" data-close-modal="lightbox-modal" aria-label="Cerrar">✕</button>
     <figure class="lightbox-figure">
-      <img id="lightbox-img" class="lightbox-img" alt="Recuerdo ampliado">
+      <img id="lightbox-img" class="lightbox-img is-hidden" alt="Recuerdo ampliado">
+      <!-- preload="none": nunca descarga hasta que se reproduce -->
+      <video id="lightbox-video" class="lightbox-video is-hidden" controls playsinline preload="none"></video>
       <figcaption class="lightbox-caption">
         <span id="lightbox-caption" class="lightbox-text"></span>
         <span id="lightbox-date" class="lightbox-date"></span>
       </figcaption>
+      <button id="btn-delete-mural-item" class="btn btn-danger-ghost" type="button">🗑️ Eliminar del Mural</button>
     </figure>
+  </div>
+
+  <!-- ---------- 3.6 Cupón (crear / editar) ---------- -->
+  <div id="coupon-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="coupon-modal-title">
+    <div class="modal-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="coupon-modal-title" class="modal-title">Nuevo cupón</h2>
+        <button class="modal-close" type="button" data-close-modal="coupon-modal" aria-label="Cerrar">✕</button>
+      </div>
+
+      <form id="form-coupon" class="modal-form" autocomplete="off">
+        <input type="hidden" id="coupon-id">
+        <div class="field-row field-row-emoji">
+          <label class="field-group">
+            <span class="field-label">Icono</span>
+            <input type="text" id="coupon-icon" class="field-control" maxlength="4" value="🎟️" placeholder="🎟️">
+          </label>
+          <label class="field-group">
+            <span class="field-label">Costo (puntos)</span>
+            <input type="number" id="coupon-cost" class="field-control" min="0" max="9999" step="5" inputmode="numeric" value="50" required>
+          </label>
+        </div>
+        <label class="field-group">
+          <span class="field-label">Título</span>
+          <input type="text" id="coupon-title" class="field-control" required maxlength="70" placeholder="Ej: Masaje de 30 minutos">
+        </label>
+        <label class="field-group">
+          <span class="field-label">Descripción</span>
+          <textarea id="coupon-description" class="field-control field-textarea" rows="3" maxlength="240" placeholder="¿En qué consiste este vale?"></textarea>
+        </label>
+        <button id="btn-save-coupon" class="btn btn-primary btn-xl" type="submit">Guardar cupón</button>
+        <button id="btn-delete-coupon" class="btn btn-danger btn-xl is-hidden" type="button">🗑️ Eliminar cupón</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- 3.7 Actor del reparto (crear / editar) ---------- -->
+  <div id="actor-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="actor-modal-title">
+    <div class="modal-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="actor-modal-title" class="modal-title">Nuevo actor</h2>
+        <button class="modal-close" type="button" data-close-modal="actor-modal" aria-label="Cerrar">✕</button>
+      </div>
+
+      <form id="form-actor" class="modal-form" autocomplete="off">
+        <input type="hidden" id="actor-id">
+        <!-- tipo: "protagonista" | "secundario" (para protagonistas app.js oculta el select con .is-hidden) -->
+        <label id="actor-type-group" class="field-group">
+          <span class="field-label">Tipo</span>
+          <select id="actor-type" class="field-control">
+            <option value="secundario">🎬 Actor de reparto</option>
+            <option value="protagonista">🌟 Protagonista</option>
+          </select>
+        </label>
+
+        <!-- Avatar -->
+        <div class="actor-photo-row">
+          <div id="actor-photo-preview" class="actor-photo-preview" aria-label="Avatar del personaje">
+            <img id="actor-photo-img" class="actor-photo-img is-hidden" alt="Avatar del personaje">
+            <span id="actor-photo-placeholder" class="actor-photo-placeholder" aria-hidden="true">🎭</span>
+          </div>
+          <label class="btn btn-soft btn-sm" for="actor-photo-input">📷 Elegir foto</label>
+          <input type="file" id="actor-photo-input" class="visually-hidden-input" accept="image/*">
+        </div>
+
+        <label class="field-group">
+          <span class="field-label">Nombre</span>
+          <input type="text" id="actor-name" class="field-control" required maxlength="60" placeholder="Ej: Mamá de Salo, Luna la perrita…">
+        </label>
+        <label class="field-group">
+          <span class="field-label">Rol en la historia</span>
+          <input type="text" id="actor-role" class="field-control" maxlength="80" placeholder="Ej: La suegra consentidora">
+        </label>
+        <label class="field-group">
+          <span class="field-label">Superpoder</span>
+          <input type="text" id="actor-superpower" class="field-control" maxlength="80" placeholder="Ej: Cocina todo con amor">
+        </label>
+        <label class="field-group">
+          <span class="field-label">Debilidad</span>
+          <input type="text" id="actor-weakness" class="field-control" maxlength="80" placeholder="Ej: Los gatos">
+        </label>
+
+        <!-- Planes del Baúl vinculados (app.js inserta .checklist-item con checkbox por plan) -->
+        <div class="field-group">
+          <span class="field-label">Planes del Baúl vinculados</span>
+          <div id="actor-plans-checklist" class="plans-checklist" role="group" aria-label="Planes vinculados a este personaje"></div>
+        </div>
+
+        <button id="btn-save-actor" class="btn btn-primary btn-xl" type="submit">Guardar personaje</button>
+        <button id="btn-delete-actor" class="btn btn-danger btn-xl is-hidden" type="button">🗑️ Eliminar personaje</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- 3.8 Frase de sabiduría (crear / editar) ---------- -->
+  <div id="sabiduria-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="sabiduria-modal-title">
+    <div class="modal-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="sabiduria-modal-title" class="modal-title">Nueva frase</h2>
+        <button class="modal-close" type="button" data-close-modal="sabiduria-modal" aria-label="Cerrar">✕</button>
+      </div>
+
+      <form id="form-sabiduria" class="modal-form" autocomplete="off">
+        <input type="hidden" id="sabiduria-id">
+        <label class="field-group">
+          <span class="field-label">Categoría</span>
+          <select id="sabiduria-category" class="field-control">
+            <option value="Animo">💛 Para levantar el ánimo</option>
+            <option value="Charras">😂 Frases charras de los dos</option>
+            <option value="Idolos">🌟 De nuestros ídolos</option>
+          </select>
+        </label>
+        <label class="field-group">
+          <span class="field-label">Frase</span>
+          <textarea id="sabiduria-phrase" class="field-control field-textarea" rows="4" required maxlength="400" placeholder="Escribe la frase…"></textarea>
+        </label>
+        <label class="field-group">
+          <span class="field-label">Autor (opcional)</span>
+          <input type="text" id="sabiduria-author" class="field-control" maxlength="70" placeholder="Ej: Salo, Simón, Messi…">
+        </label>
+        <button id="btn-save-sabiduria" class="btn btn-primary btn-xl" type="submit">Guardar frase</button>
+        <button id="btn-delete-sabiduria" class="btn btn-danger btn-xl is-hidden" type="button">🗑️ Eliminar frase</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- 3.9 Galleta de la fortuna (pantalla completa) ---------- -->
+  <div id="sabiduria-fortune-modal" class="modal-overlay fortune-overlay" role="dialog" aria-modal="true" aria-labelledby="fortune-phrase">
+    <button class="modal-close modal-close-floating" type="button" data-close-modal="sabiduria-fortune-modal" aria-label="Cerrar">✕</button>
+    <div class="fortune-stage">
+      <!-- app.js añade .is-cracked para animar la galleta al abrirse -->
+      <div id="fortune-cookie" class="fortune-cookie" aria-hidden="true">🥠</div>
+      <div class="fortune-paper">
+        <span id="fortune-category-label" class="fortune-category">💛 Para levantar el ánimo</span>
+        <p id="fortune-phrase" class="fortune-phrase">…</p>
+        <span id="fortune-author" class="fortune-author"></span>
+      </div>
+      <button id="btn-fortune-another" class="btn btn-primary btn-xl" type="button">🎲 Otra frase</button>
+    </div>
+  </div>
+
+  <!-- ---------- 3.10 Ajustes ---------- -->
+  <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div class="modal-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="settings-modal-title" class="modal-title">⚙️ Ajustes</h2>
+        <button class="modal-close" type="button" data-close-modal="settings-modal" aria-label="Cerrar">✕</button>
+      </div>
+
+      <!-- Identidad del teléfono -->
+      <section class="settings-section" aria-labelledby="settings-identity-title">
+        <h3 id="settings-identity-title" class="settings-title">Identidad de este teléfono</h3>
+        <p id="settings-identity-current" class="settings-hint">Aún no has elegido quién eres.</p>
+        <div class="identity-choices identity-choices-compact">
+          <button id="settings-identity-simon" class="identity-choice identity-choice-simon" type="button" data-identity="simon">
+            <span class="identity-choice-emoji" aria-hidden="true">🥭</span>
+            <span class="identity-choice-name">Simón</span>
+          </button>
+          <button id="settings-identity-salo" class="identity-choice identity-choice-salo" type="button" data-identity="salo">
+            <span class="identity-choice-emoji" aria-hidden="true">🌸</span>
+            <span class="identity-choice-name">Salomé</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Notificaciones push -->
+      <section class="settings-section" aria-labelledby="settings-push-title">
+        <h3 id="settings-push-title" class="settings-title">🔔 Notificaciones</h3>
+        <p id="push-status-text" class="settings-hint">Activa las notificaciones para enterarte cuando el otro suba algo, complete un plan o piense en ti.</p>
+        <button id="btn-enable-push" class="btn btn-soft btn-xl" type="button">🔔 Activar notificaciones</button>
+      </section>
+
+      <!-- Gestor de preguntas trampa -->
+      <section class="settings-section" aria-labelledby="trampa-title">
+        <h3 id="trampa-title" class="settings-title">📝 Mis Preguntas Trampa para <span id="trampa-partner-name" class="trampa-partner">mi pareja</span></h3>
+        <p class="settings-hint">Estas preguntas le saldrán al otro en su candado. Es un secreto: solo tú las ves.</p>
+
+        <!-- app.js inserta .trampa-item (pregunta + botones ✏️ 🗑️) -->
+        <div id="trampa-questions-list" class="trampa-list"></div>
+        <p id="trampa-empty" class="settings-hint is-hidden">Aún no has creado preguntas trampa.</p>
+
+        <form id="form-trampa-question" class="modal-form trampa-form" autocomplete="off">
+          <input type="hidden" id="trampa-question-id">
+          <label class="field-group">
+            <span class="field-label">Pregunta</span>
+            <input type="text" id="trampa-question-text" class="field-control" required maxlength="140" placeholder="Ej: ¿Cuál fue nuestra primera cita?">
+          </label>
+          <div class="field-row">
+            <label class="field-group">
+              <span class="field-label">Opción A</span>
+              <input type="text" id="trampa-option-a" class="field-control" required maxlength="70">
+            </label>
+            <label class="field-group">
+              <span class="field-label">Opción B</span>
+              <input type="text" id="trampa-option-b" class="field-control" required maxlength="70">
+            </label>
+          </div>
+          <div class="field-row">
+            <label class="field-group">
+              <span class="field-label">Opción C (opcional)</span>
+              <input type="text" id="trampa-option-c" class="field-control" maxlength="70">
+            </label>
+            <label class="field-group">
+              <span class="field-label">Opción D (opcional)</span>
+              <input type="text" id="trampa-option-d" class="field-control" maxlength="70">
+            </label>
+          </div>
+          <label class="field-group">
+            <span class="field-label">Respuesta correcta</span>
+            <select id="trampa-correct" class="field-control">
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+            </select>
+          </label>
+          <button id="btn-save-trampa" class="btn btn-primary btn-xl" type="submit">Guardar pregunta</button>
+          <button id="btn-cancel-trampa-edit" class="btn btn-ghost btn-xl is-hidden" type="button">Cancelar edición</button>
+        </form>
+      </section>
+    </div>
   </div>
 
 
@@ -367,7 +947,7 @@
        ========================================================================== -->
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
 
-  <!-- Único script: toda la lógica vive en app.js -->
+  <!-- Único script propio: toda la lógica vive en app.js -->
   <script src="app.js" defer></script>
 </body>
 </html>

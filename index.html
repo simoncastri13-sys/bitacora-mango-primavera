@@ -1,24 +1,28 @@
 <!DOCTYPE html>
 <!--
   ============================================================================
-  BITÁCORA DE PALITO DE MANGO Y PRIMAVERA · index.html  (V3 Upgrade)
+  BITÁCORA DE PALITO DE MANGO Y PRIMAVERA · index.html  (V4.0 · Coquí 3D + Dobby)
   Responsabilidad: SOLO estructura semántica (DOM). Estilos -> styles.css,
   lógica -> app.js (único <script> propio, con `defer`, al final del <body>).
   CERO JavaScript inline. Los IDs/clases son un CONTRATO con app.js: no renombrar.
 
   Capas z-index (abajo -> arriba):
     app-shell 0 < app-header 100 < bottom-nav 200 < baul-fab 210
-      < modal-overlay 500 < toast-container 900 < lock-screen 1000
+      < modal-overlay 500 < scene-quote-welcome 990 < lock-screen 1000 < toast-container 1100
+  Flujo cinematico de entrada: #lock-screen (trivia) -> .is-unlocked -> #scene-quote-welcome (frase)
+      -> .is-hidden -> #view-inicio.
 
   Clases de estado que añade/quita app.js:
     .is-active (pestaña/vista/chip/panel) · .is-hidden (display:none)
     .is-open (modal visible) · .is-unlocked (candado abierto)
     .is-rolling (slot de la ruleta girando) · .is-completed (plan hecho)
     .is-spinning (icono sync) · .is-pulsing (botón háptico tras enviar)
+    V4: .is-jumping (Coquí salta) · .is-leaving (escena sale) · .is-flipped (flip 3D) · .has-incoming-touch
+        (radar en #btn-thinking-of-you) · .is-favorite (estrella) · data-theme="dark" en <html> (modo crepuscular)
 
   Identificadores de usuario (contrato V3): "simon" y "salo".
   Vistas principales (bottom-nav): view-inicio, view-baul, view-mural, view-premios.
-  Sub-vistas (se abren desde Inicio): view-reparto, view-sabiduria.
+  Sub-vistas (se abren desde Inicio): view-reparto. (V4: el banco de Sabiduría vive en Ajustes.)
   ============================================================================
 -->
 <html lang="es">
@@ -29,6 +33,8 @@
   <title>Bitácora de Palito de Mango y Primavera</title>
   <meta name="description" content="Bitácora romántica de Simón &amp; Salomé: baúl de planes, mural de recuerdos, premios, reparto y sabiduría.">
   <meta name="theme-color" content="#FFB347">
+  <!-- Soporta claro/oscuro nativo en controles de formulario; el tema real lo fija [data-theme] -->
+  <meta name="color-scheme" content="light dark">
 
   <!-- Metadatos para instalar como PWA en iOS -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -62,9 +68,30 @@
     <!-- app.js inyecta aquí <span class="confetti-piece"> (mango, coral, verde y azul cielo) -->
     <div id="confetti-container" class="confetti-container" aria-hidden="true"></div>
 
+    <!-- 10 petalos/chispas ambientales sutiles (solo transform + opacity). Decorativo. -->
+    <div class="ambient-petals" aria-hidden="true">
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+    </div>
+
+    <!-- Coquí 3D: mascota flotante. app.js cambia el src de #coqui-img (happy / grumpy / magic / celebrate),
+         añade .is-jumping al tocar e inyecta <span class="coqui-spark"> en #coqui-sparks. -->
+    <div id="coqui-mascot" class="coqui-mascot" role="button" tabindex="0" aria-label="Coquí, la mascota. Tócala para que salte">
+      <div id="coqui-sparks" class="coqui-sparks" aria-hidden="true"></div>
+      <span id="coqui-shadow" class="coqui-shadow" aria-hidden="true"></span>
+      <img id="coqui-img" class="coqui-img" src="assets/mascot/coqui-happy.png" alt="Coquí, la mascota de la bitácora" width="512" height="512" decoding="async" draggable="false">
+    </div>
+
     <!-- Tarjeta: animaciones .shake-error (fallo) / .unlock-success (acierto) -->
     <div id="trivia-card" class="trivia-card">
-      <div class="trivia-emblem" aria-hidden="true">🥭</div>
       <p class="trivia-kicker">Bitácora de Palito de Mango y Primavera</p>
       <h1 id="lock-title" class="trivia-title">Demuestra quién eres</h1>
       <p id="trivia-question" class="trivia-question" aria-live="polite">Cargando pregunta…</p>
@@ -77,12 +104,54 @@
 
 
   <!-- ==========================================================================
+       1.b ESCENA CINEMATICA DE BIENVENIDA (frase). Capa fixed z-index 990, justo DEBAJO del
+       candado: al hacer fade-out #lock-screen se revela esta escena. app.js la muestra quitando
+       .is-hidden; para salir añade .is-leaving (450 ms) y luego .is-hidden.
+       ========================================================================== -->
+  <section id="scene-quote-welcome" class="scene-quote-welcome is-hidden" aria-label="Frase de bienvenida" aria-live="polite">
+    <!-- 10 petalos/chispas ambientales sutiles (solo transform + opacity). Decorativo. -->
+    <div class="ambient-petals" aria-hidden="true">
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+      <span class="petal"></span>
+    </div>
+
+    <div class="scene-content">
+      <div class="scene-coqui">
+        <span class="coqui-shadow coqui-shadow-welcome" aria-hidden="true"></span>
+        <img id="coqui-welcome-img" class="coqui-img coqui-welcome-img" src="assets/mascot/coqui-magic.png" alt="Coquí celebrando contigo" width="512" height="512" decoding="async" draggable="false">
+      </div>
+
+      <!-- Tarjeta con flip 3D de entrada (frase sorpresa) -->
+      <article class="quote-welcome-card">
+        <span id="quote-welcome-badge" class="quote-welcome-badge">💛 Una frase para ti</span>
+        <p id="quote-welcome-text" class="quote-welcome-text">…</p>
+        <span id="quote-welcome-author" class="quote-welcome-author"></span>
+      </article>
+
+      <div class="scene-actions">
+        <button id="btn-enter-app" class="btn btn-primary btn-xl" type="button">Entrar a nuestro refugio 🥭</button>
+        <button id="btn-next-quote" class="btn btn-ghost btn-xl" type="button">🎲 Otra frase</button>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==========================================================================
        2. SHELL PRINCIPAL
        ========================================================================== -->
   <div id="app-shell" class="app-shell">
 
     <!-- ---------- Cabecera sticky ---------- -->
     <header id="app-header" class="app-header">
+      <!-- Fila 1: titulo dinamico + acciones principales -->
       <div class="app-header-top">
         <div class="app-header-text">
           <!-- Título dinámico: app.js lo cambia según la vista activa -->
@@ -92,7 +161,8 @@
         </div>
 
         <div class="app-header-actions">
-          <!-- Botón háptico latente: vibra + push "te estoy pensando" -->
+          <!-- Botón háptico latente: vibra + push "te estoy pensando". app.js añade .has-incoming-touch
+               cuando el otro te envía un toque: onda radar + latido (solo transform/opacity). -->
           <button id="btn-thinking-of-you" class="btn-thinking" type="button" aria-label="Pensando en ti" title="Pensando en ti">
             <span class="thinking-emoji" aria-hidden="true">🥭🌸</span>
           </button>
@@ -107,6 +177,7 @@
         </div>
       </div>
 
+      <!-- Fila 2: identidad, estado de sync y herramientas V4 (Dobby, tema, candado). Hace wrap en pantallas estrechas -->
       <div class="app-header-meta">
         <!-- Indicador de usuario. app.js añade .is-simon / .is-salo / .is-unknown -->
         <span id="user-identity-pill" class="identity-pill is-unknown" role="status">
@@ -118,6 +189,19 @@
           <span class="sync-dot" aria-hidden="true"></span>
           <span class="sync-label">Local</span>
         </span>
+        <div class="app-header-tools">
+          <button id="btn-dobby-master" class="btn-dobby" type="button" aria-label="Abrir a Dobby, el asistente de ideas" title="Dobby, el elfo de las ideas">🧦✨ Dobby</button>
+          <button id="btn-theme-toggle" class="btn-icon" type="button" aria-label="Cambiar entre modo día y modo noche" title="Modo día / noche">🌙</button>
+          <button id="btn-lock-now" class="btn-icon" type="button" aria-label="Bloquear la bitácora ahora" title="Bloquear ahora">🔒</button>
+        </div>
+      </div>
+
+      <!-- Banner persistente de "te estoy pensando" (Badging API). app.js quita .is-hidden al recibir un toque -->
+      <div id="banner-persistent-touch" class="banner-persistent-touch is-hidden" role="alert">
+        <span class="banner-touch-emoji" aria-hidden="true">🥭🌸</span>
+        <p id="persistent-touch-text" class="banner-touch-text">Alguien está pensando en ti 💛</p>
+        <button id="btn-reply-touch" class="btn-touch-reply" type="button">Responder 💛</button>
+        <button id="btn-dismiss-touch" class="btn-touch-dismiss" type="button" aria-label="Descartar aviso">✕</button>
       </div>
     </header>
 
@@ -128,6 +212,56 @@
       <section id="view-inicio" class="app-view is-active" aria-label="Inicio">
         <h2 class="view-title">Nuestro Refugio</h2>
         <p class="view-motto">Donde el mundo se apaga y nosotros empezamos.</p>
+
+        <!-- Mood del dia: #pill-mood-user abre el selector; los estados de ambos se ven siempre -->
+        <section class="mood-card" aria-label="Mood del día">
+          <div class="mood-card-head">
+            <h2 class="card-title">¿Cómo amaneciste hoy?</h2>
+            <button id="pill-mood-user" class="mood-pill" type="button" aria-haspopup="true" aria-expanded="false">🙂 Mi mood</button>
+          </div>
+          <div id="mood-picker" class="mood-picker is-hidden" role="group" aria-label="Elige tu mood de hoy">
+            <button class="mood-option" type="button" data-mood="😍"><span class="mood-option-emoji" aria-hidden="true">😍</span><span class="mood-option-label">Enamorado/a</span></button>
+            <button class="mood-option" type="button" data-mood="😊"><span class="mood-option-emoji" aria-hidden="true">😊</span><span class="mood-option-label">Feliz</span></button>
+            <button class="mood-option" type="button" data-mood="🥱"><span class="mood-option-emoji" aria-hidden="true">🥱</span><span class="mood-option-label">Cansado/a</span></button>
+            <button class="mood-option" type="button" data-mood="🥺"><span class="mood-option-emoji" aria-hidden="true">🥺</span><span class="mood-option-label">Sensible</span></button>
+            <button class="mood-option" type="button" data-mood="🌧️"><span class="mood-option-emoji" aria-hidden="true">🌧️</span><span class="mood-option-label">Gris</span></button>
+          </div>
+          <div class="mood-status-row">
+            <span id="mood-status-simon" class="mood-status mood-status-simon">🥭 Simón: —</span>
+            <span id="mood-status-salo" class="mood-status mood-status-salo">🌸 Salo: —</span>
+          </div>
+          <!-- Alerta amable si el otro esta 🥺 o 🌧️ -->
+          <div id="banner-mood-alert" class="banner-mood-alert is-hidden" role="alert">
+            <span class="banner-mood-emoji" aria-hidden="true">🫂</span>
+            <p id="banner-mood-alert-text" class="banner-mood-text"></p>
+          </div>
+        </section>
+
+        <!-- Contador del proximo encuentro. app.js actualiza #countdown-display cada 1 s -->
+        <article id="card-proximo-encuentro" class="encuentro-card" aria-label="Próximo encuentro">
+          <div class="encuentro-head">
+            <span class="encuentro-kicker">💞 Próximo encuentro</span>
+            <button id="btn-edit-encuentro" class="btn-edit-encuentro" type="button" aria-label="Editar fecha del próximo encuentro">✏️</button>
+          </div>
+          <p id="countdown-display" class="countdown-display" role="timer" aria-live="off">Fija la fecha de su próximo encuentro</p>
+          <p id="countdown-note" class="countdown-note"></p>
+
+          <!-- Formulario inline para fijar la fecha (se muestra quitando .is-hidden) -->
+          <form id="form-encuentro" class="encuentro-form is-hidden" autocomplete="off">
+            <label class="field-group">
+              <span class="field-label">Fecha y hora</span>
+              <input type="datetime-local" id="input-encuentro-date" class="field-control" required>
+            </label>
+            <label class="field-group">
+              <span class="field-label">Nota (opcional)</span>
+              <input type="text" id="input-encuentro-note" class="field-control" maxlength="120" placeholder="Ej: ¡Nos vemos en el aeropuerto!">
+            </label>
+            <div class="encuentro-form-actions">
+              <button id="btn-save-encuentro" class="btn btn-primary" type="submit">Guardar fecha</button>
+              <button id="btn-cancel-encuentro" class="btn btn-ghost" type="button">Cancelar</button>
+            </div>
+          </form>
+        </article>
 
         <!-- Manifiesto Oficial (texto exacto) -->
         <article class="manifesto-card">
@@ -172,9 +306,8 @@
         </div>
 
         <!-- Accesos destacados -->
-        <button id="btn-open-sabiduria" class="feature-link feature-link-sabiduria" type="button">
-          🩹 Para cuando necesites sabiduría en tus malos momentos ➡️
-        </button>
+        <!-- V4: la frase aleatoria abre la galleta de la fortuna; el CRUD del banco vive en Ajustes -->
+        <button id="btn-random-quote-home" class="btn btn-primary btn-xl btn-fortune" type="button">🎲 Necesito una frase ya 💛</button>
         <button id="btn-open-reparto" class="feature-link feature-link-reparto" type="button">
           🎭 El Reparto Oficial de Nuestra Historia ➡️
         </button>
@@ -218,6 +351,8 @@
       <!-- ===================== VISTA 2: EL BAÚL ===================== -->
       <section id="view-baul" class="app-view" aria-label="El Baúl de planes">
         <h2 class="view-title">El Baúl de Planes</h2>
+        <!-- Protocolo Cine: recomendaciones TMDB + IA (abre #modal-movie-protocol) -->
+        <button id="btn-open-movie-protocol" class="btn btn-soft btn-xl movie-protocol-btn" type="button">🍿 Protocolo Cine: ¿qué vemos hoy?</button>
 
         <!-- Conmutador estricto Pendientes / Completados (paneles aislados) -->
         <div class="segmented-switch" role="tablist" aria-label="Estado de los planes">
@@ -294,6 +429,14 @@
         <p class="view-motto">Instantes que no cambio por nada.</p>
         <button id="btn-upload-mural" class="btn btn-primary btn-xl upload-btn" type="button">📸 Subir foto o video al Mural</button>
 
+        <!-- Filtros del mural (data-filter). Scroll horizontal INTERNO del contenedor, no de la página -->
+        <div id="mural-filter-chips" class="filter-bar" role="group" aria-label="Filtrar el mural">
+          <button class="category-chip is-active" type="button" data-filter="todos">Todos</button>
+          <button class="category-chip" type="button" data-filter="fotos">📸 Fotos</button>
+          <button class="category-chip" type="button" data-filter="videos">🎥 Videos</button>
+          <button class="category-chip" type="button" data-filter="favoritos">⭐ Favoritos</button>
+        </div>
+
         <!-- Masonry Pinterest: app.js inserta .mural-card (con .video-poster + overlay ▶️ si es video) -->
         <div id="mural-grid" class="pinterest-grid"></div>
 
@@ -302,6 +445,9 @@
           <h3 class="empty-title">El mural aún está vacío</h3>
           <p class="empty-text">Sube la primera foto o video para empezar a llenarlo de recuerdos.</p>
         </div>
+
+        <!-- Paginacion 12 en 12 -->
+        <button id="btn-mural-load-more" class="btn btn-soft btn-xl mural-load-more is-hidden" type="button">Cargar más recuerdos ⬇️</button>
       </section>
 
 
@@ -331,6 +477,7 @@
           <h3 class="section-title">🎟️ Tienda de Cupones</h3>
           <button id="btn-add-coupon" class="btn btn-soft btn-sm" type="button">+ Nuevo Cupón</button>
         </div>
+        <button id="btn-dobby-prizes" class="btn btn-dobby btn-dobby-wide" type="button">🧦✨ Dobby, ¡inventa premios para nosotros!</button>
         <!-- app.js inserta .coupon-card (icono, título, descripción, costo, botón Canjear / ✏️) -->
         <div id="coupons-catalog-grid" class="coupons-grid"></div>
         <div id="coupons-catalog-empty" class="empty-state empty-state-compact is-hidden">
@@ -355,6 +502,14 @@
         <button id="btn-back-from-reparto" class="btn-back" type="button">⬅️ Volver al Inicio</button>
         <h2 class="view-title">El Reparto Oficial</h2>
 
+        <!-- Marcador historico de retos de pareja: app.js lo renderiza en renderReparto() -->
+        <section class="retos-section" aria-label="Marcador histórico de retos">
+          <h3 class="section-title">🥊 Marcador histórico de retos</h3>
+          <div id="reparto-retos-scoreboard" class="retos-scoreboard" aria-live="polite">
+            <p class="empty-text">Aún no hay retos cumplidos. ¡Marca un plan como reto de pareja!</p>
+          </div>
+        </section>
+
         <h3 class="section-title">🌟 Los Protagonistas</h3>
         <p class="view-motto">Los protagonistas de la mejor y más dulce historia.</p>
         <!-- app.js inserta .cast-card (tipo protagonista) -->
@@ -376,35 +531,6 @@
         </div>
       </section>
 
-
-      <!-- ===================== SUB-VISTA: SABIDURÍA ===================== -->
-      <section id="view-sabiduria" class="app-view" aria-label="Sabiduría para los malos momentos">
-        <button id="btn-back-from-sabiduria" class="btn-back" type="button">⬅️ Volver al Inicio</button>
-        <h2 class="view-title">Sabiduría para los malos momentos</h2>
-        <p class="view-motto">Para cuando necesites sabiduría en tus malos momentos.</p>
-
-        <button id="btn-random-sabiduria" class="btn btn-primary btn-xl btn-fortune" type="button">🎲 Necesito una frase ya 💛</button>
-
-        <!-- Chips de categoría: data-category = Todas | Animo | Charras | Idolos -->
-        <div id="sabiduria-filter-bar" class="filter-bar" role="group" aria-label="Filtrar frases por categoría">
-          <button class="category-chip is-active" type="button" data-category="Todas">Todas</button>
-          <button class="category-chip" type="button" data-category="Animo">💛 Para levantar el ánimo</button>
-          <button class="category-chip" type="button" data-category="Charras">😂 Frases charras de los dos</button>
-          <button class="category-chip" type="button" data-category="Idolos">🌟 De nuestros ídolos</button>
-        </div>
-
-        <div class="section-head">
-          <h3 class="section-title">📖 Nuestro libro de frases</h3>
-          <button id="btn-add-sabiduria" class="btn btn-soft btn-sm" type="button">+ Añadir frase</button>
-        </div>
-        <!-- app.js inserta .sabiduria-card -->
-        <div id="sabiduria-grid" class="sabiduria-grid"></div>
-        <div id="sabiduria-empty" class="empty-state empty-state-compact is-hidden">
-          <div class="empty-emoji" aria-hidden="true">💛</div>
-          <h3 class="empty-title">No hay frases en esta categoría</h3>
-          <p class="empty-text">Añade una con <strong>+ Añadir frase</strong>.</p>
-        </div>
-      </section>
 
     </main>
 
@@ -559,6 +685,20 @@
             <textarea id="plan-modal-anecdote" class="field-control field-textarea" rows="4" maxlength="800" placeholder="¿Cómo fue este plan? Cuéntalo aquí…"></textarea>
           </label>
 
+          <!-- Portada del plan (coverUrl): imagen comprimida con canvas o prompt magico de Dobby -->
+          <div class="field-group cover-group">
+            <span class="field-label">Portada del plan</span>
+            <div id="plan-cover-wrapper" class="cover-preview-wrapper">
+              <img id="plan-cover-preview" class="cover-preview-img is-hidden" alt="Portada del plan">
+              <span class="cover-placeholder" aria-hidden="true">🖼️ Sin portada</span>
+            </div>
+            <div class="cover-actions">
+              <label class="btn btn-soft btn-sm" for="plan-cover-input">📷 Elegir portada</label>
+              <input type="file" id="plan-cover-input" class="visually-hidden-input" accept="image/*">
+              <button id="btn-generate-cover-prompt" class="btn btn-dobby btn-sm" type="button">✨ Prompt de portada</button>
+            </div>
+          </div>
+
           <!-- Medio del plan: foto o video -->
           <label class="photo-drop" for="plan-modal-media-input">
             <span class="photo-drop-icon" aria-hidden="true">📷🎥</span>
@@ -570,6 +710,42 @@
             <video id="plan-modal-video-preview" class="photo-preview-video is-hidden" controls playsinline preload="metadata"></video>
             <span id="plan-modal-media-meta" class="photo-compression-meta"></span>
             <button id="btn-delete-plan-media" class="btn-media-delete" type="button" aria-label="Quitar foto o video del plan">🗑️</button>
+          </div>
+
+
+          <!-- Plan: barra de progreso real de compresion (720p@30fps) + Plan B (480p o enlace de Drive) -->
+          <div class="video-compress-block">
+            <span id="plan-video-compress-label" class="video-compress-label is-hidden">Comprimiendo video…</span>
+            <progress id="plan-video-compress-progress" class="video-compress-progress is-hidden" max="100" value="0" aria-label="Progreso de compresión del video"></progress>
+            <div id="plan-video-compress-fallback" class="video-compress-fallback is-hidden" role="group" aria-label="Plan B para video pesado">
+              <p class="video-compress-fallback-text">⚠️ El video sigue siendo muy pesado. Elige un plan B:</p>
+              <button id="btn-plan-video-compress-480" class="btn btn-soft btn-xl" type="button">🎞️ Comprimir a 480p</button>
+              <label class="field-group">
+                <span class="field-label">…o pega un enlace de Google Drive</span>
+                <input type="url" id="input-plan-drive-video-link" class="field-control" inputmode="url" autocomplete="off" placeholder="https://drive.google.com/file/d/…">
+              </label>
+            </div>
+          </div>
+
+          <!-- Buscador de musica estilo Historia de IG (iTunes Search). El atributo form="" desasocia el input
+               del <form> padre: pulsar Enter NO envia el formulario. app.js escucha keydown/click. -->
+          <div id="plan-music-search" class="music-search" role="search" aria-label="Buscar canción para el recuerdo">
+            <span class="field-label">🎵 Música estilo Historia de IG (opcional)</span>
+            <div class="music-search-row">
+              <input type="search" id="plan-music-search-input" class="field-control" form="music-search-detached" inputmode="search" enterkeyhint="search" autocomplete="off" placeholder="Canción o artista…" aria-label="Buscar canción o artista">
+              <button id="btn-plan-music-search" class="btn btn-soft btn-sm" type="button">Buscar</button>
+            </div>
+            <!-- app.js inyecta .music-result (portada, titulo, artista y boton ▶️ de preview de 30 s) -->
+            <div id="plan-music-results" class="music-results" aria-live="polite"></div>
+            <div id="plan-music-selected" class="music-selected is-hidden">
+              <img id="plan-music-selected-art" class="music-result-art" alt="">
+              <div class="music-result-info">
+                <span id="plan-music-selected-title" class="music-result-title"></span>
+                <span id="plan-music-selected-artist" class="music-result-artist"></span>
+              </div>
+              <button id="btn-plan-music-preview" class="btn-music-preview" type="button" aria-label="Escuchar vista previa">▶️</button>
+              <button id="btn-plan-music-clear" class="btn-music-clear" type="button" aria-label="Quitar canción">✕</button>
+            </div>
           </div>
 
           <button id="btn-save-plan-detail" class="btn btn-primary btn-xl" type="submit">Guardar</button>
@@ -687,6 +863,20 @@
           <span id="mural-media-meta" class="photo-compression-meta"></span>
         </div>
 
+          <!-- Mural: barra de progreso real de compresion (720p@30fps) + Plan B (480p o enlace de Drive) -->
+          <div class="video-compress-block">
+            <span id="video-compress-label" class="video-compress-label is-hidden">Comprimiendo video…</span>
+            <progress id="video-compress-progress" class="video-compress-progress is-hidden" max="100" value="0" aria-label="Progreso de compresión del video"></progress>
+            <div id="video-compress-fallback" class="video-compress-fallback is-hidden" role="group" aria-label="Plan B para video pesado">
+              <p class="video-compress-fallback-text">⚠️ El video sigue siendo muy pesado. Elige un plan B:</p>
+              <button id="btn-video-compress-480" class="btn btn-soft btn-xl" type="button">🎞️ Comprimir a 480p</button>
+              <label class="field-group">
+                <span class="field-label">…o pega un enlace de Google Drive</span>
+                <input type="url" id="input-drive-video-link" class="field-control" inputmode="url" autocomplete="off" placeholder="https://drive.google.com/file/d/…">
+              </label>
+            </div>
+          </div>
+
         <label class="field-group">
           <span class="field-label">Descripción</span>
           <input type="text" id="mural-caption-input" class="field-control" maxlength="120" placeholder="Una frase para recordarlo">
@@ -696,6 +886,27 @@
           <span class="field-label">Fecha</span>
           <input type="date" id="mural-date-input" class="field-control">
         </label>
+
+        <!-- Buscador de musica estilo Historia de IG (iTunes Search). El atributo form="" desasocia el input
+             del <form> padre: pulsar Enter NO envia el formulario. app.js escucha keydown/click. -->
+        <div id="mural-music-search" class="music-search" role="search" aria-label="Buscar canción para el recuerdo">
+          <span class="field-label">🎵 Música estilo Historia de IG (opcional)</span>
+          <div class="music-search-row">
+            <input type="search" id="mural-music-search-input" class="field-control" form="music-search-detached" inputmode="search" enterkeyhint="search" autocomplete="off" placeholder="Canción o artista…" aria-label="Buscar canción o artista">
+            <button id="btn-mural-music-search" class="btn btn-soft btn-sm" type="button">Buscar</button>
+          </div>
+        <!-- app.js inyecta .music-result (portada, titulo, artista y boton ▶️ de preview de 30 s) -->
+          <div id="mural-music-results" class="music-results" aria-live="polite"></div>
+          <div id="mural-music-selected" class="music-selected is-hidden">
+            <img id="mural-music-selected-art" class="music-result-art" alt="">
+            <div class="music-result-info">
+              <span id="mural-music-selected-title" class="music-result-title"></span>
+              <span id="mural-music-selected-artist" class="music-result-artist"></span>
+            </div>
+            <button id="btn-mural-music-preview" class="btn-music-preview" type="button" aria-label="Escuchar vista previa">▶️</button>
+            <button id="btn-mural-music-clear" class="btn-music-clear" type="button" aria-label="Quitar canción">✕</button>
+          </div>
+        </div>
         <button id="btn-submit-mural" class="btn btn-primary btn-xl" type="submit">Subir al Mural</button>
       </form>
     </div>
@@ -704,6 +915,8 @@
   <!-- ---------- 3.5 Lightbox (foto o video a pantalla completa, fondo oscuro) ---------- -->
   <div id="lightbox-modal" class="modal-overlay lightbox" role="dialog" aria-modal="true" aria-label="Recuerdo ampliado">
     <button class="modal-close modal-close-floating" type="button" data-close-modal="lightbox-modal" aria-label="Cerrar">✕</button>
+    <!-- Favorito: app.js alterna .is-favorite / aria-pressed (toggleFavoriteMural) -->
+    <button id="btn-lightbox-favorite" class="btn-lightbox-favorite" type="button" aria-pressed="false" aria-label="Marcar como favorito">⭐</button>
     <figure class="lightbox-figure">
       <img id="lightbox-img" class="lightbox-img is-hidden" alt="Recuerdo ampliado">
       <!-- preload="none": nunca descarga hasta que se reproduce -->
@@ -713,8 +926,21 @@
         <span id="lightbox-caption" class="lightbox-text"></span>
         <span id="lightbox-date" class="lightbox-date"></span>
       </figcaption>
+      <!-- Pildora de musica (solo en fotos). EQ animado de 3 barras; .is-paused congela las barras -->
+      <div id="lightbox-music-pill" class="music-pill is-hidden" role="group" aria-label="Música del recuerdo">
+        <img id="lightbox-music-art" class="music-pill-art" alt="">
+        <div class="music-pill-info">
+          <span id="lightbox-music-title" class="music-pill-title"></span>
+          <progress id="lightbox-music-progress" class="music-progress" max="100" value="0" aria-label="Progreso de la canción"></progress>
+        </div>
+        <span class="eq-equalizer" aria-hidden="true"><span class="eq-bar"></span><span class="eq-bar"></span><span class="eq-bar"></span></span>
+        <button id="btn-lightbox-music-mute" class="music-pill-btn" type="button" aria-label="Silenciar o activar música">🔊</button>
+        <a id="lightbox-music-spotify" class="music-pill-btn" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer" aria-label="Abrir en Spotify">🎧</a>
+      </div>
       <button id="btn-delete-mural-item" class="btn btn-danger-ghost" type="button">🗑️ Eliminar del Mural</button>
     </figure>
+    <!-- preload="none": no descarga nada hasta reproducir; app.js pausa al cerrar o en video -->
+    <audio id="lightbox-audio" loop preload="none"></audio>
   </div>
 
   <!-- ---------- 3.6 Cupón (crear / editar) ---------- -->
@@ -891,6 +1117,98 @@
         <button id="btn-enable-push" class="btn btn-soft btn-xl" type="button">🔔 Activar notificaciones</button>
       </section>
 
+      <!-- Frase dedicada (V4) -->
+      <section id="panel-dedicated-quote" class="settings-section" aria-labelledby="dedicated-title">
+        <h3 id="dedicated-title" class="settings-title">💌 Frase dedicada para <span id="dedicated-partner-name" class="trampa-partner">mi pareja</span></h3>
+        <p class="settings-hint">Le aparecerá al entrar, en la escena de bienvenida, y recibirá un aviso push.</p>
+        <form id="form-dedicated-quote" class="modal-form" autocomplete="off">
+          <label class="field-group">
+            <span class="field-label">Tu frase</span>
+            <textarea id="dedicated-quote-text" class="field-control field-textarea" rows="3" maxlength="300" required placeholder="Escribe algo bonito…"></textarea>
+          </label>
+          <label class="field-group">
+            <span class="field-label">Autor (opcional)</span>
+            <input type="text" id="dedicated-quote-author" class="field-control" maxlength="70" placeholder="Ej: Yo, Simón, Neruda…">
+          </label>
+          <fieldset class="winner-group duration-group">
+            <legend class="field-label">¿Cuánto tiempo se muestra?</legend>
+            <div class="winner-options winner-options-2">
+              <label class="winner-option">
+                <input type="radio" name="dedicated-quote-duration" id="dedicated-duration-once" value="once" class="winner-input" checked>
+                <span class="winner-pill">1️⃣ Una sola vez</span>
+              </label>
+              <label class="winner-option">
+                <input type="radio" name="dedicated-quote-duration" id="dedicated-duration-today" value="today" class="winner-input">
+                <span class="winner-pill">📅 Todo el día</span>
+              </label>
+            </div>
+          </fieldset>
+          <label class="switch-row">
+            <input type="checkbox" id="dedicated-quote-save-bank" class="switch-input">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span class="switch-label">Guardar también en el banco de Sabiduría</span>
+          </label>
+          <button id="btn-save-dedicated-quote" class="btn btn-primary btn-xl" type="submit">💌 Enviar frase dedicada</button>
+          <button id="btn-delete-dedicated-quote" class="btn btn-danger btn-xl is-hidden" type="button">🗑️ Retirar frase activa</button>
+          <p id="dedicated-quote-status" class="settings-hint" role="status"></p>
+        </form>
+      </section>
+
+      <!-- Mensajes programados (V4) -->
+      <section id="panel-scheduled-messages" class="settings-section" aria-labelledby="scheduled-title">
+        <h3 id="scheduled-title" class="settings-title">⏰ Mensajes programados</h3>
+        <p class="settings-hint">Se enviarán como notificación push a tu pareja a la hora elegida.</p>
+        <div id="scheduled-messages-list" class="scheduled-list"></div>
+        <p id="scheduled-messages-empty" class="settings-hint is-hidden">Aún no hay mensajes programados.</p>
+        <form id="form-scheduled-message" class="modal-form scheduled-form" autocomplete="off">
+          <input type="hidden" id="scheduled-message-id">
+          <label class="field-group">
+            <span class="field-label">Mensaje</span>
+            <textarea id="scheduled-message-text" class="field-control field-textarea" rows="3" maxlength="200" required placeholder="Ej: Buenos días, mi palito de mango 🥭"></textarea>
+          </label>
+          <div class="field-row">
+            <label class="field-group">
+              <span class="field-label">Fecha y hora</span>
+              <input type="datetime-local" id="scheduled-message-datetime" class="field-control" required>
+            </label>
+            <label class="field-group">
+              <span class="field-label">Repetir</span>
+              <select id="scheduled-message-repeat" class="field-control">
+                <option value="none">Una vez</option>
+                <option value="daily">Cada día</option>
+                <option value="weekly">Cada semana</option>
+              </select>
+            </label>
+          </div>
+          <button id="btn-ai-scheduled-message" class="btn btn-dobby btn-xl" type="button">🧦✨ Que Dobby lo escriba</button>
+          <button id="btn-save-scheduled-message" class="btn btn-primary btn-xl" type="submit">⏰ Programar mensaje</button>
+          <button id="btn-cancel-scheduled-edit" class="btn btn-ghost btn-xl is-hidden" type="button">Cancelar edición</button>
+        </form>
+      </section>
+
+      <!-- Banco de Sabiduría (CRUD plegable; movido desde la antigua sub-vista) -->
+      <details id="panel-sabiduria-crud" class="settings-section settings-details">
+        <summary class="settings-summary"><span>📖 Banco de Sabiduría</span></summary>
+        <p class="settings-hint">Las frases que salen en la galleta de la fortuna y en la bienvenida.</p>
+        <div class="settings-details-actions">
+          <button id="btn-add-sabiduria" class="btn btn-soft btn-sm" type="button">+ Añadir frase</button>
+        </div>
+        <!-- Chips de categoría: data-category = Todas | Animo | Charras | Idolos -->
+        <div id="sabiduria-filter-bar" class="filter-bar" role="group" aria-label="Filtrar frases por categoría">
+          <button class="category-chip is-active" type="button" data-category="Todas">Todas</button>
+          <button class="category-chip" type="button" data-category="Animo">💛 Para levantar el ánimo</button>
+          <button class="category-chip" type="button" data-category="Charras">😂 Frases charras de los dos</button>
+          <button class="category-chip" type="button" data-category="Idolos">🌟 De nuestros ídolos</button>
+        </div>
+        <!-- app.js inserta .sabiduria-card -->
+        <div id="sabiduria-grid" class="sabiduria-grid"></div>
+        <div id="sabiduria-empty" class="empty-state empty-state-compact is-hidden">
+          <div class="empty-emoji" aria-hidden="true">💛</div>
+          <h3 class="empty-title">No hay frases en esta categoría</h3>
+          <p class="empty-text">Añade una con <strong>+ Añadir frase</strong>.</p>
+        </div>
+      </details>
+
       <!-- Gestor de preguntas trampa -->
       <section class="settings-section" aria-labelledby="trampa-title">
         <h3 id="trampa-title" class="settings-title">📝 Mis Preguntas Trampa para <span id="trampa-partner-name" class="trampa-partner">mi pareja</span></h3>
@@ -939,12 +1257,126 @@
           <button id="btn-cancel-trampa-edit" class="btn btn-ghost btn-xl is-hidden" type="button">Cancelar edición</button>
         </form>
       </section>
+
+      <!-- Copia de seguridad (V4) -->
+      <section class="settings-section" aria-labelledby="backup-title">
+        <h3 id="backup-title" class="settings-title">💾 Copia de seguridad</h3>
+        <p class="settings-hint">Descarga todos vuestros datos (planes, mural, cupones, puntos, frases…) en un archivo JSON.</p>
+        <button id="btn-export-backup-json" class="btn btn-soft btn-xl" type="button">⬇️ Exportar copia (JSON)</button>
+      </section>
     </div>
   </div>
 
 
+  <!-- ---------- 3.11 Dobby (asistente IA). Bottom-sheet ---------- -->
+  <div id="modal-dobby" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-dobby-title">
+    <div class="modal-sheet dobby-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="modal-dobby-title" class="modal-title">🧦✨ Dobby</h2>
+        <button class="modal-close" type="button" data-close-modal="modal-dobby" aria-label="Cerrar">✕</button>
+      </div>
+      <p class="modal-subtitle modal-subtitle-left">Dobby es un elfo libre y tiene ideas para ustedes. ¿Qué necesitan?</p>
+
+      <!-- Atajos por tarea (data-task) -->
+      <div id="dobby-task-chips" class="chip-bar dobby-chips" role="group" aria-label="Tareas de Dobby">
+        <button class="dobby-chip" type="button" data-task="prizes">🎁 Premios</button>
+        <button class="dobby-chip" type="button" data-task="plans">🥭 Planes</button>
+        <button class="dobby-chip" type="button" data-task="quote">💌 Frase</button>
+        <button class="dobby-chip" type="button" data-task="scheduled_msg">⏰ Mensaje</button>
+        <button class="dobby-chip" type="button" data-task="cover_prompt">🖼️ Portada</button>
+        <button class="dobby-chip is-active" type="button" data-task="chat">💬 Charlar</button>
+      </div>
+
+      <!-- Historial en RAM de sesion: app.js inserta .dobby-msg y tarjetas .ai-card con botones de 1 toque -->
+      <div id="dobby-chat-log" class="dobby-chat-log" role="log" aria-live="polite">
+        <div class="dobby-msg is-ai">¡Dobby está libre y listo para ayudar! Pídeme ideas de premios, planes, frases o mensajes. 🧦✨</div>
+      </div>
+      <div id="dobby-loading" class="dobby-loading is-hidden" role="status" aria-label="Dobby está pensando">
+        <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+      </div>
+
+      <form id="form-dobby" class="dobby-form" autocomplete="off">
+        <input type="text" id="dobby-input" class="field-control" maxlength="300" enterkeyhint="send" placeholder="Escríbele a Dobby…" aria-label="Mensaje para Dobby">
+        <button id="btn-dobby-send" class="btn btn-primary" type="submit">Enviar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- 3.12 Protocolo Cine. Bottom-sheet ---------- -->
+  <div id="modal-movie-protocol" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-movie-title">
+    <div class="modal-sheet movie-sheet">
+      <div class="modal-grabber" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="modal-movie-title" class="modal-title">🍿 Protocolo Cine</h2>
+        <button class="modal-close" type="button" data-close-modal="modal-movie-protocol" aria-label="Cerrar">✕</button>
+      </div>
+      <p class="modal-subtitle modal-subtitle-left">Cuéntame el plan y te digo qué ver hoy (catálogo de Colombia).</p>
+
+      <form id="form-movie-protocol" class="modal-form" autocomplete="off">
+        <div class="field-row">
+          <label class="field-group">
+            <span class="field-label">Tipo</span>
+            <select id="movie-type" class="field-control">
+              <option value="ambos">🎬 Película o serie</option>
+              <option value="pelicula">🎞️ Película</option>
+              <option value="serie">📺 Serie</option>
+            </select>
+          </label>
+          <label class="field-group">
+            <span class="field-label">Mood</span>
+            <select id="movie-mood" class="field-control">
+              <option value="romantico">💕 Romántico</option>
+              <option value="reir">😂 Para reír</option>
+              <option value="emocion">🎢 Emoción</option>
+              <option value="relax">🛋️ Relax</option>
+              <option value="llorar">🥹 Para llorar bonito</option>
+              <option value="terror">👻 Susto suave</option>
+            </select>
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field-group">
+            <span class="field-label">Energía</span>
+            <select id="movie-energy" class="field-control">
+              <option value="baja">🔋 Baja (modo manta)</option>
+              <option value="media">🔋🔋 Media</option>
+              <option value="alta">🔋🔋🔋 Alta</option>
+            </select>
+          </label>
+          <label class="field-group">
+            <span class="field-label">Plataforma</span>
+            <select id="movie-platform" class="field-control">
+              <option value="cualquiera">Cualquiera</option>
+              <option value="netflix">Netflix</option>
+              <option value="prime">Prime Video</option>
+              <option value="disney">Disney+</option>
+              <option value="max">Max</option>
+              <option value="apple">Apple TV+</option>
+            </select>
+          </label>
+        </div>
+        <label class="field-group">
+          <span class="field-label">¿Algo en especial? (opcional)</span>
+          <input type="text" id="movie-query" class="field-control" maxlength="120" placeholder="Ej: algo tipo Notting Hill">
+        </label>
+        <button id="btn-movie-search" class="btn btn-primary btn-xl" type="submit">🔮 Recomiéndame algo</button>
+      </form>
+
+      <div id="movie-loading" class="dobby-loading is-hidden" role="status" aria-label="Buscando recomendaciones">
+        <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+      </div>
+      <!-- app.js inserta .movie-card (titulo, año, plataforma, sinopsis, por que para ustedes, botones de 1 toque) -->
+      <div id="movie-results" class="movie-results" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- Audio compartido para las vistas previas de 30 s de iTunes en los buscadores de musica -->
+  <audio id="music-preview-audio" preload="none"></audio>
+
+
   <!-- ==========================================================================
-       4. TOASTS (app.js inserta <div class="toast toast-success|error|info">)
+       4. TOASTS (z-index 1100: visibles incluso sobre candado y escena) (app.js inserta <div class="toast toast-success|error|info">)
        ========================================================================== -->
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
 

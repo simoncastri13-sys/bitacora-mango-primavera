@@ -1,29 +1,38 @@
 /**
  * ============================================================================
- * 🥭🌸 BITÁCORA DE PALITO DE MANGO Y PRIMAVERA · SERVICE WORKER (OFFLINE-FIRST)
+ * 🥭🌸 BITÁCORA DE PALITO DE MANGO Y PRIMAVERA · SERVICE WORKER V4.0 (OFFLINE-FIRST)
  * ============================================================================
  * ARCHIVO: sw.js
- * ESTRATEGIA:
- *   1. Cache-First para el App Shell estático (./, index.html, styles.css, app.js, manifest.json).
- *   2. Network-Only (no cachear) para streams de video de Drive y endpoints de OneSignal.
- *   3. Network-First con fallback a caché para la API de Google Apps Script y miniaturas de Drive.
- *   4. Purga automática de cachés obsoletas (`v1`, `v2`, etc.) al activar `v3`.
+ * ESTRATEGIA V4.0:
+ *   1. Pre-caché del App Shell completo + `./OneSignalSDKWorker.js` + las 4 poses
+ *      3D de la mascota Coquí (`coqui-{happy,magic,grumpy,celebrate}.png`).
+ *   2. Network-Only (pase directo a red sin interferir CORS ni Range) para
+ *      OneSignal, streams de video de Drive, Spotify, Apple iTunes Search/Lookup,
+ *      previews de audio/portadas (`mzstatic.com`) y catálogo de cine (`themoviedb.org`).
+ *   3. Network-First con respaldo offline en Cache Storage para Google Apps Script,
+ *      miniaturas de Google Drive, librerías ESM (`jsdelivr.net`) y App Shell.
+ *   4. Purga automática de cachés obsoletas (`v1`, `v2`, `v3.x`) al activar `v4.0`.
  * ============================================================================
  */
 
-// 🛠️ BACKDOOR: CONFIGURACIÓN DEL SERVICE WORKER (SW_CONFIG)
+// 🛠️ BACKDOOR: CONFIGURACIÓN DEL SERVICE WORKER (SW_CONFIG V4.0)
 const SW_CONFIG = {
-  // Nombre de la caché del App Shell (subir versión fuerza purga de cachés anteriores).
-  CACHE_NAME: 'bitacora-mango-primavera-shell-v3.3',
-  // Recursos estáticos que forman el "App Shell".
+  // Nombre de la caché del App Shell V4.0 (fuerza purga limpia de v3.x y previas).
+  CACHE_NAME: 'bitacora-mango-primavera-shell-v4.0',
+  // Recursos estáticos esenciales pre-cacheados al instalar la PWA.
   SHELL_ASSETS: [
     './',
     './index.html',
     './styles.css',
     './app.js',
-    './manifest.json'
+    './manifest.json',
+    './OneSignalSDKWorker.js',
+    './assets/mascot/coqui-happy.png',
+    './assets/mascot/coqui-magic.png',
+    './assets/mascot/coqui-grumpy.png',
+    './assets/mascot/coqui-celebrate.png'
   ],
-  // Patrones que NUNCA se guardan en caché (streams de video, OneSignal, Spotify embed).
+  // Patrones que pasan directo a la red (streams multimedia, OneSignal, Spotify, iTunes, Apple CDN y TMDB).
   NETWORK_ONLY_PATTERNS: [
     /onesignal\.com/i,
     /cdn\.onesignal\.com/i,
@@ -32,11 +41,17 @@ const SW_CONFIG = {
     /drive\.usercontent\.google\.com/i,
     /drive\.google\.com\/file\//i,
     /open\.spotify\.com/i,
-    /scdn\.co/i
+    /scdn\.co/i,
+    /itunes\.apple\.com/i,
+    /mzstatic\.com/i,
+    /themoviedb\.org/i,
+    /tmdb\.org/i
   ],
-  // Patrones que deben usar la estrategia Network-First (con respaldo offline en caché).
+  // Patrones que usan estrategia Network-First con respaldo offline en caché.
   NETWORK_FIRST_PATTERNS: [
-    /\.googleapis\.com/i,               // Google APIs
+    /\.googleapis\.com/i,               // Google APIs y Google Fonts
+    /\.gstatic\.com/i,                  // Fuentes estáticas
+    /cdn\.jsdelivr\.net/i,              // Módulos ESM dinámicos (mp4-muxer WebCodecs)
     /script\.googleusercontent\.com/i,  // Apps Script endpoints (GET)
     /script\.google\.com/i,             // Apps Script base URL
     /drive\.google\.com\/thumbnail/i,   // Miniaturas de fotos y pósters de Drive
@@ -45,7 +60,8 @@ const SW_CONFIG = {
 };
 
 /**
- * Instala el Service Worker, pre-cachea el App Shell (saltando caché HTTP de Safari) y toma el relevo.
+ * Instala el Service Worker V4.0, pre-cachea el App Shell + Mascota Coquí
+ * (tolerante a fallos individuales para no abortar la instalación) y toma el relevo.
  */
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -54,7 +70,7 @@ self.addEventListener('install', event => {
         SW_CONFIG.SHELL_ASSETS.map(asset =>
           fetch(new Request(asset, { cache: 'reload' }))
             .then(resp => (resp && resp.status === 200 ? cache.put(asset, resp) : null))
-            .catch(() => cache.add(asset))
+            .catch(() => cache.add(asset).catch(() => null))
         )
       ))
       .then(() => self.skipWaiting())
@@ -62,7 +78,8 @@ self.addEventListener('install', event => {
 });
 
 /**
- * Activa el Service Worker, elimina todas las cachés antiguas y reclama los clientes.
+ * Activa el Service Worker V4.0, elimina todas las cachés anteriores (`!== v4.0`)
+ * y reclama inmediatamente las ventanas abiertas.
  */
 self.addEventListener('activate', event => {
   event.waitUntil(
@@ -76,16 +93,17 @@ self.addEventListener('activate', event => {
 
 /**
  * Intercepta peticiones GET:
- *   - Peticiones con cabecera `Range` (streaming `<video>`) o `NETWORK_ONLY_PATTERNS`:
- *     pasan directo a la red sin tocar Cache Storage.
- *   - `NETWORK_FIRST_PATTERNS`: red primero, caché si no hay conexión.
- *   - `SHELL_ASSETS`: caché primero (carga instantánea en el celular).
- *   - Resto de GET: red primero con fallback a caché.
+ *   - POST/PUT/DELETE o cabeceras `Range` (`<video>` / `<audio>`): directo a red.
+ *   - `NETWORK_ONLY_PATTERNS` (`itunes.apple.com`, `mzstatic.com`, `themoviedb.org`,
+ *     OneSignal, streams de Drive, Spotify): directo a red.
+ *   - `SHELL_ASSETS`: Network-First revalidando caché HTTP para recibir updates al instante,
+ *     con respaldo instantáneo en Cache Storage cuando no hay red.
+ *   - `NETWORK_FIRST_PATTERNS` y resto de GET: Network-First con fallback a caché.
  */
 self.addEventListener('fetch', event => {
   const { request } = event;
 
-  // No interceptar POST/PUT/DELETE (mutaciones hacia GAS u OneSignal) ni peticiones Range de video.
+  // No interceptar mutaciones ni peticiones parciales Range de video/audio.
   if (request.method !== 'GET' || request.headers.has('range')) {
     return;
   }
@@ -101,7 +119,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // No cachear nunca OneSignal, Spotify ni descargas directas de video.
+  // Permitir red directa sin cachear para iTunes, mzstatic, TMDB, OneSignal, Spotify y descargas de video.
   const isNetworkOnly = SW_CONFIG.NETWORK_ONLY_PATTERNS.some(pattern => pattern.test(url.href));
   if (isNetworkOnly) {
     event.respondWith(fetch(request));
@@ -128,8 +146,7 @@ self.addEventListener('fetch', event => {
 });
 
 /**
- * Estrategia Cache-First (`ignoreSearch: true` para que `./index.html?v=...`
- * o la raíz con query params coincidan con el App Shell pre-cacheado).
+ * Estrategia Cache-First (`ignoreSearch: true` para activos versionados con query string).
  */
 async function cacheFirst(request) {
   const cache = await caches.open(SW_CONFIG.CACHE_NAME);
@@ -146,8 +163,7 @@ async function cacheFirst(request) {
 
 /**
  * Estrategia Network-First con fallback a caché y a `./index.html` en navegaciones.
- * Cuando `bypassHttpCache` es true (para el App Shell), revalida contra GitHub Pages
- * para que las actualizaciones de código se reflejen de inmediato sin esperar 10 min.
+ * Cuando `bypassHttpCache` es true (App Shell), fuerza `cache: 'no-cache'` contra GitHub Pages.
  */
 async function networkFirst(request, bypassHttpCache = false) {
   const cache = await caches.open(SW_CONFIG.CACHE_NAME);
@@ -193,11 +209,18 @@ self.addEventListener('message', event => {
 });
 
 /**
- * Al tocar una notificación nativa en iOS/Android, enfoca o abre la Bitácora.
+ * Al tocar una notificación local de la Bitácora (`tag: bitacora-*`) en iOS/Android,
+ * enfoca o abre la ventana activa sin interferir con el listener propio de OneSignal SDK v16.
  */
 self.addEventListener('notificationclick', event => {
+  const tag = String((event.notification && event.notification.tag) || '');
+  // Si el Service Worker corre fusionado con OneSignalSDK.sw.js y la notificación no es local nuestra,
+  // dejamos que OneSignal gestione su propio click/deep-link.
+  if (typeof self.OneSignal !== 'undefined' && tag && !tag.startsWith('bitacora-')) {
+    return;
+  }
   event.notification.close();
-  const targetUrl = (event.notification.data && event.notification.data.url) || './';
+  const targetUrl = (event.notification && event.notification.data && event.notification.data.url) || './';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
       for (const client of clientList) {

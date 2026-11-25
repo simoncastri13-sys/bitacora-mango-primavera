@@ -1,7 +1,7 @@
 {
   "name": "Bitácora de Palito de Mango y Primavera",
   "short_name": "Mango & Primavera",
-  "description": "Bitácora romántica de Simón & Salomé: baúl de planes, ruleta del destino, mural de recuerdos y premios.",
+  "description": "Bitácora romántica de Simón & Salomé: baúl de planes, ruleta del destino, mural de recuerdos, premios, Dobby y el Coquí.",
   "lang": "es-CO",
   "dir": "ltr",
   "id": "./index.html",
@@ -10,8 +10,11 @@
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#FFB347",
-  "background_color": "#FFFDF9",
-  "categories": ["lifestyle", "social"],
+  "background_color": "#FEF5EA",
+  "categories": [
+    "lifestyle",
+    "social"
+  ],
   "icons": [
     {
       "src": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='192'%20height='192'%20viewBox='0%200%20512%20512'%3E%3Crect%20width='512'%20height='512'%20rx='112'%20fill='%23FFB347'/%3E%3Cellipse%20cx='256'%20cy='300'%20rx='140'%20ry='160'%20fill='%23F57C00'/%3E%3Cellipse%20cx='210'%20cy='260'%20rx='36'%20ry='72'%20fill='%23FFCC80'%20opacity='0.65'/%3E%3Cpath%20d='M270%20150%20C300%2080%20380%2070%20414%20100%20C394%20160%20330%20180%20270%20150%20Z'%20fill='%23A5D6A7'/%3E%3Ccircle%20cx='120'%20cy='120'%20r='22'%20fill='%23F8BBD0'/%3E%3Ccircle%20cx='96'%20cy='160'%20r='12'%20fill='%23FF8A80'/%3E%3C/svg%3E",
@@ -24,6 +27,17 @@
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "assets/mascot/coqui-happy.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "prefer_related_applications": false
 }

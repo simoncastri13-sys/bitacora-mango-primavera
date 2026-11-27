@@ -45,7 +45,7 @@ const APP_CONFIG = {
   IMAGE_QUALITY: 0.8,                  // Calidad JPEG (0.0 a 1.0)
   COVER_MAX_WIDTH: 1000,               // Ancho máx. (px) para Portadas Mágicas (`coverUrl`)
   COVER_QUALITY: 0.82,                 // Calidad JPEG para portadas
-  VIDEO_PASSTHROUGH_MB: 22,            // Si pesa < 22 MB, sube directo sin recodificar (instantáneo en iPhone)
+  VIDEO_PASSTHROUGH_MB: 30,            // Si pesa < 30 MB, sube directo sin recodificar (instantáneo en iPhone)
   VIDEO_MAX_COMPRESSED_MB: 35,         // Umbral máx. tras comprimir antes de activar Plan B
   MAX_VIDEO_MB: 36,                    // Tope duro de payload hacia Google Apps Script
   VIDEO_TARGET_HEIGHT: 720,            // Resolución objetivo principal (720p)
@@ -2360,6 +2360,11 @@ async function processVideoFile(file, { targetHeight = APP_CONFIG.VIDEO_TARGET_H
       err.showFallback = true;
       throw err;
     }
+  }
+
+  // Si "comprimido" salió más pesado que el original y el original cabe en el límite, usar original
+  if (finalBlob && finalBlob.size > file.size && rawSizeMb <= APP_CONFIG.VIDEO_MAX_COMPRESSED_MB && await canPlayVideoBlob(file)) {
+    finalBlob = file;
   }
 
   const finalMb = finalBlob.size / (1024 * 1024);

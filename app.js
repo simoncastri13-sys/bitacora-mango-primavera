@@ -1786,6 +1786,9 @@ async function loadVideoIntoPlayer(vidEl, iframeEl, item) {
   if (iframeEl) { iframeEl.src = "about:blank"; iframeEl.classList.add("is-hidden"); }
 
   if (cachedBlob && vidEl) {
+    vidEl.playsInline = true;
+    vidEl.setAttribute("playsinline", "");
+    vidEl.setAttribute("webkit-playsinline", "");
     vidEl.poster = poster;
     vidEl.src = cachedBlob;
     vidEl.classList.remove("is-hidden");
@@ -1942,11 +1945,41 @@ function computeTargetVideoDims(srcW, srcH, targetShortSide) {
   return { width: Math.max(2, w), height: Math.max(2, h) };
 }
 
+/** Verifica en Safari/WebKit que un Blob de video realmente se pueda decodificar y reproducir. */
+function canPlayVideoBlob(blob) {
+  return new Promise(resolve => {
+    if (!blob || blob.size < 256) return resolve(false);
+    const url = URL.createObjectURL(blob);
+    const v = document.createElement("video");
+    let settled = false;
+    const finish = ok => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { v.pause(); v.removeAttribute("src"); v.load(); v.remove(); } catch {}
+      try { URL.revokeObjectURL(url); } catch {}
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), 4000);
+    v.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;";
+    v.muted = true;
+    v.playsInline = true;
+    v.setAttribute("playsinline", "");
+    v.setAttribute("webkit-playsinline", "");
+    v.preload = "auto";
+    v.onloadeddata = () => finish((v.videoWidth || 0) > 0 && (Number(v.duration) || 0) > 0);
+    v.onerror = () => finish(false);
+    document.body.appendChild(v);
+    v.src = url;
+    try { v.load(); } catch {}
+  });
+}
+
 /**
  * Punto 1 — Motor Primario: Compresión en cliente con `WebCodecs` (`VideoEncoder` + `AudioEncoder`)
- * + `mp4-muxer` a 720p@30fps (o 480p@30fps en Plan B) con reporte real de progreso.
+ * + `mp4-muxer` a 720p@24-30fps (o 480p en Plan B) con reporte real de progreso.
  */
-async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress = null } = {}) {
+async function compressVideoWithWebCodecs(file, { targetHeight = 720, includeAudio = true, onProgress = null } = {}) {
   if (typeof VideoEncoder === "undefined" || typeof VideoFrame === "undefined") {
     throw new Error("WebCodecs no soportado en este navegador.");
   }
@@ -1959,14 +1992,16 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress
   video.playsInline = true;
   video.setAttribute("muted", "");
   video.setAttribute("playsinline", "");
+  video.setAttribute("webkit-playsinline", "");
   video.preload = "auto";
   document.body.appendChild(video);
 
   try {
     await new Promise((resolve, reject) => {
-      video.onloadedmetadata = () => resolve();
+      video.onloadeddata = () => resolve();
       video.onerror = () => reject(new Error("No se pudo abrir el video para comprimir."));
       video.src = url;
+      try { video.load(); } catch {}
     });
 
     const duration = Number(video.duration) || 0;
@@ -1975,24 +2010,32 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress
     }
 
     const { width, height } = computeTargetVideoDims(video.videoWidth || 720, video.videoHeight || 1280, targetHeight);
-    const fps = APP_CONFIG.VIDEO_TARGET_FPS;
+    // 24 fps para clips > 10s acelera la compresión ~20% en iPhone manteniendo fluidez
+    const fps = duration > 10 ? Math.min(24, APP_CONFIG.VIDEO_TARGET_FPS) : APP_CONFIG.VIDEO_TARGET_FPS;
     const bitrate = targetHeight <= 480 ? APP_CONFIG.VIDEO_BITRATE_480 : APP_CONFIG.VIDEO_BITRATE_720;
 
-    // Seleccionar perfil H.264 compatible por hardware
-    const candidateCodecs = ["avc1.4d001f", "avc1.42001f", "avc1.42e01f", "avc1.64001f"];
+    // Seleccionar perfil H.264 compatible con portrait 720x1280 (Level 4.0 primero, luego 3.1)
+    const candidateCodecs = ["avc1.4d0028", "avc1.42e028", "avc1.4d001f", "avc1.42001f", "avc1.640028"];
     let selectedCodec = "";
     for (const codec of candidateCodecs) {
       try {
-        const sup = await VideoEncoder.isConfigSupported({ codec, width, height, bitrate, framerate: fps });
+        const sup = await VideoEncoder.isConfigSupported({
+          codec,
+          width,
+          height,
+          bitrate,
+          framerate: fps,
+          avc: { format: "avc" }
+        });
         if (sup && sup.supported) { selectedCodec = codec; break; }
       } catch {}
     }
     if (!selectedCodec) throw new Error("Codificador H.264 WebCodecs no disponible.");
 
-    // Intentar decodificar pista de audio para empaquetarla en AAC (opcional si el clip es mudo)
+    // Intentar decodificar pista de audio para empaquetarla en AAC (solo si se habilita y produce muestras)
     let audioBuffer = null;
     let canEncodeAudio = false;
-    if (typeof AudioEncoder !== "undefined" && typeof AudioData !== "undefined" && (window.AudioContext || window.webkitAudioContext)) {
+    if (includeAudio && typeof AudioEncoder !== "undefined" && typeof AudioData !== "undefined" && (window.AudioContext || window.webkitAudioContext)) {
       try {
         const Ctx = window.AudioContext || window.webkitAudioContext;
         const actx = new Ctx();
@@ -2005,7 +2048,7 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress
           sampleRate: audioBuffer.sampleRate,
           bitrate: 128000
         });
-        canEncodeAudio = Boolean(aSup && aSup.supported);
+        canEncodeAudio = Boolean(aSup && aSup.supported && audioBuffer.length > 0);
       } catch {
         audioBuffer = null;
         canEncodeAudio = false;
@@ -2029,18 +2072,27 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress
 
     const muxer = new Muxer(muxerOpts);
     let encoderErr = null;
+    let videoChunksCount = 0;
 
     const videoEncoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      output: (chunk, meta) => { videoChunksCount++; muxer.addVideoChunk(chunk, meta); },
       error: e => { encoderErr = e; }
     });
-    videoEncoder.configure({ codec: selectedCodec, width, height, bitrate, framerate: fps });
+    videoEncoder.configure({
+      codec: selectedCodec,
+      width,
+      height,
+      bitrate,
+      framerate: fps,
+      avc: { format: "avc" }
+    });
 
-    // Codificar pista de audio si existe
+    // Codificar pista de audio si existe y verificar que no falle
     if (canEncodeAudio && audioBuffer) {
+      let audioErr = null;
       const audioEncoder = new AudioEncoder({
         output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-        error: () => {}
+        error: e => { audioErr = e; }
       });
       audioEncoder.configure({
         codec: "mp4a.40.2",
@@ -2052,6 +2104,7 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress
       const chunkFrames = 4096;
       const sr = audioBuffer.sampleRate;
       for (let offset = 0; offset < totalSamples; offset += chunkFrames) {
+        if (audioErr) throw audioErr;
         const framesCount = Math.min(chunkFrames, totalSamples - offset);
         const planar = new Float32Array(framesCount * audioChannels);
         for (let ch = 0; ch < audioChannels; ch++) {
@@ -2071,6 +2124,7 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress
       }
       await audioEncoder.flush();
       audioEncoder.close();
+      if (audioErr) throw audioErr;
     }
 
     // Muestrear fotogramas a `fps` sobre `<canvas>` y alimentar `VideoEncoder`
@@ -2088,7 +2142,7 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress
         let doneSeek = false;
         const finish = () => { if (!doneSeek) { doneSeek = true; resSeek(); } };
         video.addEventListener("seeked", finish, { once: true });
-        setTimeout(finish, 260);
+        setTimeout(finish, 140);
         try { video.currentTime = Math.max(0, tSec); } catch { finish(); }
       });
 
@@ -2108,6 +2162,7 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, onProgress
 
     await videoEncoder.flush();
     videoEncoder.close();
+    if (videoChunksCount === 0) throw new Error("WebCodecs no generó fotogramas.");
     muxer.finalize();
 
     const outBlob = new Blob([target.buffer], { type: "video/mp4" });
@@ -2206,8 +2261,13 @@ async function compressVideoWithMediaRecorder(file, { targetHeight = 720, onProg
       if (!video.paused && !video.ended) requestAnimationFrame(drawLoop);
     };
 
-    recorder.start(250);
-    await video.play();
+    recorder.start();
+    try {
+      await video.play();
+    } catch {
+      video.muted = true;
+      await video.play();
+    }
     drawLoop();
 
     await new Promise(resEnd => {
@@ -2259,28 +2319,35 @@ async function processVideoFile(file, { targetHeight = APP_CONFIG.VIDEO_TARGET_H
     };
   }
 
-  if (onProgress) onProgress(4, `Preparando compresor ${targetHeight}p@30fps…`);
+  if (onProgress) onProgress(4, `Preparando compresor ${targetHeight}p…`);
   let finalBlob = null;
-  let compressErr = null;
 
-  try {
-    finalBlob = await compressVideoWithWebCodecs(file, { targetHeight, onProgress });
-  } catch (wcErr) {
-    console.warn("WebCodecs no disponible/falló, activando fallback MediaRecorder:", wcErr);
+  const tryCandidate = async fn => {
     try {
-      finalBlob = await compressVideoWithMediaRecorder(file, { targetHeight, onProgress });
-    } catch (mrErr) {
-      compressErr = mrErr;
+      const candidate = await fn();
+      if (candidate && await canPlayVideoBlob(candidate)) return candidate;
+      console.warn("El video comprimido no pasó la verificación de reproducción en Safari.");
+    } catch (e) {
+      console.warn("Intento de compresión falló:", e);
     }
+    return null;
+  };
+
+  finalBlob = await tryCandidate(() => compressVideoWithWebCodecs(file, { targetHeight, includeAudio: true, onProgress }));
+  if (!finalBlob) {
+    finalBlob = await tryCandidate(() => compressVideoWithWebCodecs(file, { targetHeight, includeAudio: false, onProgress }));
+  }
+  if (!finalBlob) {
+    finalBlob = await tryCandidate(() => compressVideoWithMediaRecorder(file, { targetHeight, onProgress }));
   }
 
-  // Si ambos motores fallaron (p. ej. restricción en Safari), usar archivo original solo si <= 28 MB
+  // Si ningún motor produjo un MP4 reproducible en Safari, usar archivo original solo si <= 28 MB y reproducible
   if (!finalBlob) {
-    if (rawSizeMb <= APP_CONFIG.VIDEO_MAX_COMPRESSED_MB) {
+    if (rawSizeMb <= APP_CONFIG.VIDEO_MAX_COMPRESSED_MB && await canPlayVideoBlob(file)) {
       if (onProgress) onProgress(100, `Video directo (${rawSizeMb.toFixed(1)} MB) ✅`);
       finalBlob = file;
     } else {
-      const err = new Error(`No se pudo comprimir en este navegador (${rawSizeMb.toFixed(1)} MB). Usa 480p o pega el link de Google Drive.`);
+      const err = new Error(`No se pudo generar un video compatible en este navegador (${rawSizeMb.toFixed(1)} MB). Usa 480p o pega el link de Google Drive.`);
       err.showFallback = true;
       throw err;
     }

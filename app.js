@@ -46,8 +46,8 @@ const APP_CONFIG = {
   COVER_MAX_WIDTH: 1000,               // Ancho máx. (px) para Portadas Mágicas (`coverUrl`)
   COVER_QUALITY: 0.82,                 // Calidad JPEG para portadas
   VIDEO_PASSTHROUGH_MB: 22,            // Si pesa < 22 MB, sube directo sin recodificar (instantáneo en iPhone)
-  VIDEO_MAX_COMPRESSED_MB: 28,         // Umbral máx. tras comprimir antes de activar Plan B
-  MAX_VIDEO_MB: 30,                    // Tope duro de payload hacia Google Apps Script
+  VIDEO_MAX_COMPRESSED_MB: 35,         // Umbral máx. tras comprimir antes de activar Plan B
+  MAX_VIDEO_MB: 36,                    // Tope duro de payload hacia Google Apps Script
   VIDEO_TARGET_HEIGHT: 720,            // Resolución objetivo principal (720p)
   VIDEO_FALLBACK_HEIGHT: 480,          // Resolución Plan B ultra-compacto (480p)
   VIDEO_TARGET_FPS: 30,                // Cuadros por segundo objetivo
@@ -1844,7 +1844,7 @@ function captureVideoPoster(fileOrBlob) {
     const video = document.createElement("video");
     let settled = false;
 
-    video.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;";
+    video.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;";
     video.muted = true;
     video.defaultMuted = true;
     video.playsInline = true;
@@ -1960,14 +1960,17 @@ function canPlayVideoBlob(blob) {
       try { URL.revokeObjectURL(url); } catch {}
       resolve(ok);
     };
-    const timer = setTimeout(() => finish(false), 4000);
-    v.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;";
+    const timer = setTimeout(() => finish(false), 6000);
+    v.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;";
     v.muted = true;
     v.playsInline = true;
     v.setAttribute("playsinline", "");
     v.setAttribute("webkit-playsinline", "");
     v.preload = "auto";
     v.onloadeddata = () => finish((v.videoWidth || 0) > 0 && (Number(v.duration) || 0) > 0);
+    v.onloadedmetadata = () => {
+      if ((v.videoWidth || 0) > 0 && (Number(v.duration) || 0) > 0) finish(true);
+    };
     v.onerror = () => finish(false);
     document.body.appendChild(v);
     v.src = url;
@@ -1987,7 +1990,7 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, includeAud
 
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
-  video.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;";
+  video.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;";
   video.muted = true;
   video.playsInline = true;
   video.setAttribute("muted", "");
@@ -2196,7 +2199,7 @@ async function compressVideoWithMediaRecorder(file, { targetHeight = 720, onProg
 
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
-  video.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;";
+  video.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;";
   video.playsInline = true;
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "");

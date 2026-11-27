@@ -45,7 +45,7 @@ const APP_CONFIG = {
   IMAGE_QUALITY: 0.8,                  // Calidad JPEG (0.0 a 1.0)
   COVER_MAX_WIDTH: 1000,               // Ancho máx. (px) para Portadas Mágicas (`coverUrl`)
   COVER_QUALITY: 0.82,                 // Calidad JPEG para portadas
-  VIDEO_PASSTHROUGH_MB: 15,            // Si pesa < 15 MB, sube directo sin recodificar
+  VIDEO_PASSTHROUGH_MB: 22,            // Si pesa < 22 MB, sube directo sin recodificar (instantáneo en iPhone)
   VIDEO_MAX_COMPRESSED_MB: 28,         // Umbral máx. tras comprimir antes de activar Plan B
   MAX_VIDEO_MB: 30,                    // Tope duro de payload hacia Google Apps Script
   VIDEO_TARGET_HEIGHT: 720,            // Resolución objetivo principal (720p)
@@ -2246,8 +2246,9 @@ async function compressVideoWithMediaRecorder(file, { targetHeight = 720, onProg
     recorder.ondataavailable = ev => { if (ev.data && ev.data.size > 0) chunks.push(ev.data); };
 
     const recDone = new Promise((resolve, reject) => {
-      recorder.onstop = () => resolve();
-      recorder.onerror = e => reject(e?.error || new Error("Error grabando stream comprimido."));
+      const doneTimer = setTimeout(() => resolve(), 3500);
+      recorder.onstop = () => { clearTimeout(doneTimer); resolve(); };
+      recorder.onerror = e => { clearTimeout(doneTimer); reject(e?.error || new Error("Error grabando stream comprimido.")); };
     });
 
     let activeDraw = true;
@@ -2255,13 +2256,13 @@ async function compressVideoWithMediaRecorder(file, { targetHeight = 720, onProg
       if (!activeDraw) return;
       try { ctx.drawImage(video, 0, 0, width, height); } catch {}
       if (onProgress && duration > 0) {
-        const pct = Math.min(98, Math.round((video.currentTime / duration) * 96));
+        const pct = Math.min(95, Math.round((video.currentTime / duration) * 95));
         onProgress(pct, `Optimizando video (${targetHeight}p) · ${pct}%`);
       }
       if (!video.paused && !video.ended) requestAnimationFrame(drawLoop);
     };
 
-    recorder.start();
+    recorder.start(500);
     try {
       await video.play();
     } catch {
@@ -2275,7 +2276,12 @@ async function compressVideoWithMediaRecorder(file, { targetHeight = 720, onProg
       setTimeout(resEnd, Math.ceil((duration + 2) * 1000));
     });
     activeDraw = false;
-    if (recorder.state !== "inactive") recorder.stop();
+    if (onProgress) onProgress(97, `Finalizando video (${targetHeight}p)…`);
+    if (recorder.state !== "inactive") {
+      try { recorder.requestData(); } catch {}
+      try { recorder.stop(); } catch {}
+    }
+    canvasStream.getTracks().forEach(t => { try { t.stop(); } catch {} });
     await recDone;
 
     const outType = chosenMime.startsWith("video/webm") ? "video/webm" : "video/mp4";
@@ -2284,7 +2290,7 @@ async function compressVideoWithMediaRecorder(file, { targetHeight = 720, onProg
     if (onProgress) onProgress(100, `Video optimizado (${targetHeight}p) ✅`);
     return outBlob;
   } finally {
-    if (audioCtx) { try { await audioCtx.close(); } catch {} }
+    if (audioCtx) { try { audioCtx.close().catch(() => {}); } catch {} }
     try { video.pause(); video.removeAttribute("src"); video.load(); video.remove(); } catch {}
     try { URL.revokeObjectURL(url); } catch {}
   }

@@ -45,7 +45,7 @@ const APP_CONFIG = {
   IMAGE_QUALITY: 0.8,                  // Calidad JPEG (0.0 a 1.0)
   COVER_MAX_WIDTH: 1000,               // Ancho máx. (px) para Portadas Mágicas (`coverUrl`)
   COVER_QUALITY: 0.82,                 // Calidad JPEG para portadas
-  VIDEO_PASSTHROUGH_MB: 30,            // Si pesa < 30 MB, sube directo sin recodificar (instantáneo en iPhone)
+  VIDEO_PASSTHROUGH_MB: 35,            // Si pesa < 35 MB, sube directo sin recodificar (instantáneo en iPhone)
   VIDEO_MAX_COMPRESSED_MB: 35,         // Umbral máx. tras comprimir antes de activar Plan B
   MAX_VIDEO_MB: 36,                    // Tope duro de payload hacia Google Apps Script
   VIDEO_TARGET_HEIGHT: 720,            // Resolución objetivo principal (720p)
@@ -2001,11 +2001,21 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, includeAud
 
   try {
     await new Promise((resolve, reject) => {
-      video.onloadeddata = () => resolve();
-      video.onerror = () => reject(new Error("No se pudo abrir el video para comprimir."));
+      let loaded = false;
+      const doneLoad = () => { if (!loaded) { loaded = true; clearTimeout(loadTimer); resolve(); } };
+      const loadTimer = setTimeout(() => reject(new Error("Timeout cargando metadata del video.")), 6000);
+      video.onloadedmetadata = doneLoad;
+      video.onloadeddata = doneLoad;
+      video.onerror = () => { clearTimeout(loadTimer); reject(new Error("No se pudo abrir el video para comprimir.")); };
       video.src = url;
       try { video.load(); } catch {}
     });
+
+    // Despertar el decodificador de hardware en iOS Safari antes de hacer seek por fotograma
+    try {
+      await video.play();
+      video.pause();
+    } catch {}
 
     const duration = Number(video.duration) || 0;
     if (!duration || !Number.isFinite(duration) || duration <= 0) {
@@ -2013,13 +2023,14 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, includeAud
     }
 
     const { width, height } = computeTargetVideoDims(video.videoWidth || 720, video.videoHeight || 1280, targetHeight);
-    // 24 fps para clips > 10s acelera la compresión ~20% en iPhone manteniendo fluidez
-    const fps = duration > 10 ? Math.min(24, APP_CONFIG.VIDEO_TARGET_FPS) : APP_CONFIG.VIDEO_TARGET_FPS;
-    const bitrate = targetHeight <= 480 ? APP_CONFIG.VIDEO_BITRATE_480 : APP_CONFIG.VIDEO_BITRATE_720;
+    // 20-24 fps para clips > 10s acelera la compresión en iPhone manteniendo fluidez
+    const fps = duration > 10 ? 20 : Math.min(24, APP_CONFIG.VIDEO_TARGET_FPS);
+    const bitrate = targetHeight <= 480 ? 780000 : 1450000;
 
-    // Seleccionar perfil H.264 compatible con portrait 720x1280 (Level 4.0 primero, luego 3.1)
-    const candidateCodecs = ["avc1.4d0028", "avc1.42e028", "avc1.4d001f", "avc1.42001f", "avc1.640028"];
+    // Seleccionar perfil H.264 compatible con portrait/landscape en iOS WebKit
+    const candidateCodecs = ["avc1.42E01E", "avc1.42001f", "avc1.4d001f", "avc1.4d0028", "avc1.42e028", "avc1.640028"];
     let selectedCodec = "";
+    let useAvcFormatOption = true;
     for (const codec of candidateCodecs) {
       try {
         const sup = await VideoEncoder.isConfigSupported({
@@ -2030,7 +2041,17 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, includeAud
           framerate: fps,
           avc: { format: "avc" }
         });
-        if (sup && sup.supported) { selectedCodec = codec; break; }
+        if (sup && sup.supported) { selectedCodec = codec; useAvcFormatOption = true; break; }
+      } catch {}
+      try {
+        const supPlain = await VideoEncoder.isConfigSupported({
+          codec,
+          width,
+          height,
+          bitrate,
+          framerate: fps
+        });
+        if (supPlain && supPlain.supported) { selectedCodec = codec; useAvcFormatOption = false; break; }
       } catch {}
     }
     if (!selectedCodec) throw new Error("Codificador H.264 WebCodecs no disponible.");
@@ -2078,17 +2099,25 @@ async function compressVideoWithWebCodecs(file, { targetHeight = 720, includeAud
     let videoChunksCount = 0;
 
     const videoEncoder = new VideoEncoder({
-      output: (chunk, meta) => { videoChunksCount++; muxer.addVideoChunk(chunk, meta); },
+      output: (chunk, meta) => {
+        try {
+          videoChunksCount++;
+          muxer.addVideoChunk(chunk, meta);
+        } catch (muxErr) {
+          encoderErr = muxErr;
+        }
+      },
       error: e => { encoderErr = e; }
     });
-    videoEncoder.configure({
+    const encCfg = {
       codec: selectedCodec,
       width,
       height,
       bitrate,
-      framerate: fps,
-      avc: { format: "avc" }
-    });
+      framerate: fps
+    };
+    if (useAvcFormatOption) encCfg.avc = { format: "avc" };
+    videoEncoder.configure(encCfg);
 
     // Codificar pista de audio si existe y verificar que no falle
     if (canEncodeAudio && audioBuffer) {
@@ -2342,12 +2371,12 @@ async function processVideoFile(file, { targetHeight = APP_CONFIG.VIDEO_TARGET_H
     return null;
   };
 
-  finalBlob = await tryCandidate(() => compressVideoWithWebCodecs(file, { targetHeight, includeAudio: true, onProgress }));
-  if (!finalBlob) {
-    finalBlob = await tryCandidate(() => compressVideoWithWebCodecs(file, { targetHeight, includeAudio: false, onProgress }));
+  finalBlob = await tryCandidate(() => compressVideoWithWebCodecs(file, { targetHeight, includeAudio: false, onProgress }));
+  if (!finalBlob && targetHeight > 480) {
+    finalBlob = await tryCandidate(() => compressVideoWithWebCodecs(file, { targetHeight: 480, includeAudio: false, onProgress }));
   }
   if (!finalBlob) {
-    finalBlob = await tryCandidate(() => compressVideoWithMediaRecorder(file, { targetHeight, onProgress }));
+    finalBlob = await tryCandidate(() => compressVideoWithMediaRecorder(file, { targetHeight: Math.min(targetHeight, 480), onProgress }));
   }
 
   // Si ningún motor produjo un MP4 reproducible en Safari, usar archivo original solo si <= 28 MB y reproducible
